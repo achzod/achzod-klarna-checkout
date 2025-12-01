@@ -145,7 +145,7 @@ module.exports = async (req, res) => {
       payment_method_types: ['card', 'klarna'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: successUrl || 'https://achzodcoaching.com/order-confirmed',
+      success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
       cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
       billing_address_collection: 'required',
       locale: 'fr',

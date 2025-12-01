@@ -32,7 +32,7 @@
           body: JSON.stringify({
             items: cartItems,
             customerEmail: emailInput ? emailInput.value : null,
-            successUrl: window.location.origin + '/order-confirmed',
+            successUrl: window.location.origin + '/order-confirmation',
             cancelUrl: window.location.origin + '/checkout'
           })
         });

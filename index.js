@@ -111,14 +111,18 @@ app.post('/checkout', async (req, res) => {
       payment_method_types: ['card', 'klarna'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: successUrl || 'https://achzodcoaching.com/confirmation',
+      success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
       cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
       billing_address_collection: 'required',
       locale: 'fr',
     };
 
-    if (customerEmail) {
-      sessionConfig.customer_email = customerEmail;
+    // Ajouter l'email du client pour le reçu Stripe
+    if (customerEmail && customerEmail.trim()) {
+      sessionConfig.customer_email = customerEmail.trim();
+      sessionConfig.payment_intent_data = {
+        receipt_email: customerEmail.trim(),
+      };
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);

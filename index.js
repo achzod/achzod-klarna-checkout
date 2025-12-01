@@ -84,28 +84,48 @@ function findPriceId(productName, amount) {
 // Route principale
 app.post('/checkout', async (req, res) => {
   try {
-    const { items, successUrl, cancelUrl, customerEmail } = req.body;
+    const { items, successUrl, cancelUrl, customerEmail, totalAmount, discountCode } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ error: 'Panier vide' });
     }
 
-    const lineItems = items.map(item => {
-      const priceId = findPriceId(item.name, item.price);
+    let lineItems = [];
 
-      if (priceId) {
-        return { price: priceId, quantity: item.quantity || 1 };
-      } else {
-        return {
-          price_data: {
-            currency: 'eur',
-            product_data: { name: item.name },
-            unit_amount: Math.round(item.price * 100),
+    // Si un total avec réduction est fourni, l'utiliser
+    if (totalAmount && totalAmount > 0) {
+      // Créer un seul line item avec le total réel
+      const itemNames = items.map(i => i.name).join(' + ');
+      lineItems = [{
+        price_data: {
+          currency: 'eur',
+          product_data: { 
+            name: itemNames.substring(0, 100),
+            description: discountCode ? `Code promo: ${discountCode}` : undefined
           },
-          quantity: item.quantity || 1,
-        };
-      }
-    });
+          unit_amount: Math.round(totalAmount * 100),
+        },
+        quantity: 1,
+      }];
+    } else {
+      // Pas de réduction, utiliser les prix individuels
+      lineItems = items.map(item => {
+        const priceId = findPriceId(item.name, item.price);
+
+        if (priceId) {
+          return { price: priceId, quantity: item.quantity || 1 };
+        } else {
+          return {
+            price_data: {
+              currency: 'eur',
+              product_data: { name: item.name },
+              unit_amount: Math.round(item.price * 100),
+            },
+            quantity: item.quantity || 1,
+          };
+        }
+      });
+    }
 
     const sessionConfig = {
       payment_method_types: ['card', 'klarna'],

@@ -1,0 +1,92 @@
+<script>
+(function() {
+  const API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout';
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Trouver le bouton Payer
+    const payButton = document.querySelector('[data-node-type="commerce-checkout-place-order-button"]');
+    if (!payButton) return;
+
+    payButton.addEventListener('click', async function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const originalText = payButton.textContent;
+      payButton.textContent = 'Redirection vers Klarna...';
+      payButton.disabled = true;
+
+      try {
+        const cartItems = getCartItems();
+        if (cartItems.length === 0) {
+          alert('Votre panier est vide');
+          payButton.textContent = originalText;
+          payButton.disabled = false;
+          return;
+        }
+
+        const emailInput = document.querySelector('input[type="email"]');
+
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: cartItems,
+            customerEmail: emailInput ? emailInput.value : null,
+            successUrl: window.location.origin + '/order-confirmed',
+            cancelUrl: window.location.origin + '/checkout'
+          })
+        });
+
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error(data.error || 'Erreur');
+        }
+      } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur de paiement. Veuillez réessayer.');
+        payButton.textContent = originalText;
+        payButton.disabled = false;
+      }
+    });
+  });
+
+  function getCartItems() {
+    const items = [];
+    const cartElements = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+
+    cartElements.forEach(el => {
+      const nameEl = el.querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper, .w-commerce-commercecartproductname');
+      const priceEl = el.querySelector('.w-commerce-commercecheckoutorderitemprice, .w-commerce-commercecartproductprice');
+
+      if (nameEl && priceEl) {
+        const name = nameEl.textContent.trim();
+        const priceText = priceEl.textContent.replace(/[^0-9,\.]/g, '').replace(',', '.');
+        const price = parseFloat(priceText);
+
+        if (name && price > 0) {
+          items.push({ name, price, quantity: 1 });
+        }
+      }
+    });
+
+    // Fallback: chercher dans tout le récapitulatif
+    if (items.length === 0) {
+      document.querySelectorAll('[class*="order-item"], [class*="cart-item"], [class*="checkout-item"]').forEach(el => {
+        const text = el.textContent;
+        const priceMatch = text.match(/(\d+[,\.]\d{2})\s*€/);
+        if (priceMatch) {
+          items.push({
+            name: text.substring(0, 80).trim(),
+            price: parseFloat(priceMatch[1].replace(',', '.')),
+            quantity: 1
+          });
+        }
+      });
+    }
+
+    return items;
+  }
+})();
+</script>

@@ -160,12 +160,11 @@ app.post('/checkout', async (req, res) => {
       locale: 'fr',
     };
 
-    // Ajouter l'email du client pour le reçu Stripe
+    // Ajouter l'email du client (pour pré-remplir le formulaire, PAS pour le reçu Stripe)
+    // On n'envoie PAS de receipt_email car on envoie notre propre email ACHZOD via webhook
     if (customerEmail && customerEmail.trim()) {
       sessionConfig.customer_email = customerEmail.trim();
-      sessionConfig.payment_intent_data = {
-        receipt_email: customerEmail.trim(),
-      };
+      // PAS de receipt_email = pas de reçu Stripe automatique
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);

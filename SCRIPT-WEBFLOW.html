@@ -1,0 +1,129 @@
+<!--
+===========================================
+SCRIPT WEBFLOW POUR KLARNA CHECKOUT
+===========================================
+
+INSTRUCTIONS:
+1. Va dans Webflow > Project Settings > Custom Code
+2. Colle ce script dans la section "Footer Code"
+3. Remplace XXXXXX par l'URL de ton service Render
+4. Publie ton site
+
+-->
+
+<script>
+(function() {
+  // ⚠️ REMPLACE CETTE URL PAR L'URL DE TON SERVICE RENDER
+  const API_URL = 'https://XXXXXX.onrender.com/checkout';
+
+  // Attendre que la page soit chargée
+  document.addEventListener('DOMContentLoaded', function() {
+
+    // Trouver le bouton de paiement Webflow
+    const checkoutForm = document.querySelector('form[data-node-type="commerce-checkout-form-container"]');
+    const payButton = document.querySelector('[data-node-type="commerce-checkout-place-order-button"]');
+
+    if (!payButton) {
+      console.log('Bouton de paiement non trouvé');
+      return;
+    }
+
+    // Intercepter le clic sur le bouton Payer
+    payButton.addEventListener('click', async function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Afficher un loader
+      const originalText = payButton.textContent;
+      payButton.textContent = 'Redirection...';
+      payButton.disabled = true;
+
+      try {
+        // Récupérer les items du panier Webflow
+        const cartItems = getCartItems();
+
+        if (cartItems.length === 0) {
+          alert('Votre panier est vide');
+          payButton.textContent = originalText;
+          payButton.disabled = false;
+          return;
+        }
+
+        // Récupérer l'email du formulaire
+        const emailInput = document.querySelector('input[type="email"]');
+        const customerEmail = emailInput ? emailInput.value : null;
+
+        // Appeler notre API
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: cartItems,
+            customerEmail: customerEmail,
+            successUrl: window.location.origin + '/confirmation',
+            cancelUrl: window.location.origin + '/checkout'
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.url) {
+          // Rediriger vers Stripe Checkout
+          window.location.href = data.url;
+        } else {
+          throw new Error(data.error || 'Erreur lors de la création du paiement');
+        }
+
+      } catch (error) {
+        console.error('Erreur:', error);
+        alert('Une erreur est survenue. Veuillez réessayer.');
+        payButton.textContent = originalText;
+        payButton.disabled = false;
+      }
+    });
+  });
+
+  // Fonction pour récupérer les items du panier
+  function getCartItems() {
+    const items = [];
+
+    // Méthode 1: Lire depuis le DOM de la page checkout
+    const cartItemElements = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+
+    cartItemElements.forEach(el => {
+      const nameEl = el.querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
+      const priceEl = el.querySelector('.w-commerce-commercecheckoutorderitemprice');
+      const qtyEl = el.querySelector('[class*="quantity"]');
+
+      if (nameEl && priceEl) {
+        const name = nameEl.textContent.trim();
+        const priceText = priceEl.textContent.replace(/[^0-9,\.]/g, '').replace(',', '.');
+        const price = parseFloat(priceText);
+        const quantity = qtyEl ? parseInt(qtyEl.textContent.replace(/[^0-9]/g, '')) || 1 : 1;
+
+        if (name && price > 0) {
+          items.push({ name, price, quantity });
+        }
+      }
+    });
+
+    // Méthode 2: Fallback - lire depuis le récapitulatif
+    if (items.length === 0) {
+      const summaryItems = document.querySelectorAll('[class*="cart-item"], [class*="order-item"]');
+      summaryItems.forEach(el => {
+        const text = el.textContent;
+        const priceMatch = text.match(/(\d+[,\.]\d{2})\s*€/);
+        if (priceMatch) {
+          items.push({
+            name: text.split(priceMatch[0])[0].trim().substring(0, 100),
+            price: parseFloat(priceMatch[1].replace(',', '.')),
+            quantity: 1
+          });
+        }
+      });
+    }
+
+    return items;
+  }
+})();
+</script>

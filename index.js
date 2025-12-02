@@ -373,6 +373,73 @@ async function sendEbookEmail(customerEmail, customerName, ebooks, totalAmount) 
   }
 }
 
+// Fonction pour envoyer une notification à Achzod pour chaque commande Klarna
+async function sendOrderNotification(customerEmail, customerName, products, totalAmount, paymentMethod) {
+  const productList = products.map(p => `• ${p}`).join('\n');
+  
+  const htmlNotification = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; background: #0A0B09; padding: 20px;">
+  <div style="max-width: 500px; margin: 0 auto; background: #1a1a1a; border-radius: 12px; padding: 30px; border: 1px solid #2a2a2a;">
+    <h1 style="color: #FFB3C7; margin: 0 0 20px 0; font-size: 24px;">💰 Nouvelle vente Klarna !</h1>
+    
+    <table style="width: 100%; color: #fff; font-size: 14px;">
+      <tr>
+        <td style="padding: 8px 0; color: #888;">Client</td>
+        <td style="padding: 8px 0; color: #fff; font-weight: bold;">${customerName || 'Non renseigné'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #888;">Email</td>
+        <td style="padding: 8px 0; color: #FFB3C7;">${customerEmail}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #888;">Produit(s)</td>
+        <td style="padding: 8px 0; color: #fff;">${products.join('<br>')}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #888;">Montant</td>
+        <td style="padding: 8px 0; color: #4CAF50; font-size: 20px; font-weight: bold;">${totalAmount}€</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #888;">Paiement</td>
+        <td style="padding: 8px 0; color: #fff;">${paymentMethod || 'Klarna/Stripe'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #888;">Date</td>
+        <td style="padding: 8px 0; color: #fff;">${new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}</td>
+      </tr>
+    </table>
+    
+    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #2a2a2a; text-align: center;">
+      <a href="https://dashboard.stripe.com/payments" style="color: #FFB3C7; text-decoration: none;">Voir dans Stripe →</a>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const mailOptions = {
+    from: {
+      name: 'ACHZOD Notifications',
+      address: process.env.EMAIL_USER || 'achzodyt@gmail.com'
+    },
+    to: 'achzodyt@gmail.com',
+    subject: `💰 Vente Klarna: ${totalAmount}€ - ${products[0] || 'Produit'}`,
+    html: htmlNotification
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('Notification envoyée à achzodyt@gmail.com');
+    return true;
+  } catch (error) {
+    console.error('Erreur envoi notification:', error);
+    return false;
+  }
+}
+
 // Webhook Stripe pour les paiements réussis
 app.post('/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -400,17 +467,20 @@ app.post('/webhook', async (req, res) => {
     
     // Récupérer les détails de la session
     const customerEmail = session.customer_email || session.customer_details?.email;
-    const customerName = session.customer_details?.name?.split(' ')[0] || '';
+    const customerName = session.customer_details?.name || '';
     const totalAmount = session.amount_total ? (session.amount_total / 100).toFixed(2) : '0';
+    const paymentMethod = session.payment_method_types?.[0] || 'Stripe';
     
     if (customerEmail) {
       // Récupérer les line items
       try {
         const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
         const ebooks = [];
+        const productNames = [];
         
         for (const item of lineItems.data) {
           const productName = item.description || item.price?.product?.name || 'Produit';
+          productNames.push(productName);
           const ebookData = findEbookLink(productName);
           
           if (ebookData) {
@@ -418,9 +488,13 @@ app.post('/webhook', async (req, res) => {
           }
         }
         
-        // Si des ebooks ont été trouvés, envoyer un seul email avec tous
+        // Envoyer notification à Achzod pour TOUTES les commandes Klarna
+        await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, paymentMethod);
+        
+        // Si des ebooks ont été trouvés, envoyer l'email au client avec les liens
         if (ebooks.length > 0) {
-          await sendEbookEmail(customerEmail, customerName, ebooks, totalAmount);
+          const firstName = customerName.split(' ')[0] || '';
+          await sendEbookEmail(customerEmail, firstName, ebooks, totalAmount);
         }
       } catch (error) {
         console.error('Erreur récupération line items:', error);

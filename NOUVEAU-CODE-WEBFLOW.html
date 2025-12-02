@@ -1,0 +1,149 @@
+<!-- 
+INSTRUCTIONS : 
+1. Va dans Webflow Designer > Pages > Checkout > Settings (engrenage)
+2. Custom Code > Before </body> tag
+3. SUPPRIME l'ancien code Klarna
+4. COLLE ce nouveau code
+5. Publie le site
+-->
+
+<style>
+/* Cache la barre fixe en bas */
+#klarna-btn-container { display: none !important; }
+
+/* Style du bouton Klarna dans la section paiement */
+.klarna-payment-option {
+  margin-top: 20px;
+  padding: 15px;
+  background: linear-gradient(135deg, #FFB3C7 0%, #FFA0B8 100%);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.klarna-payment-btn {
+  width: 100%;
+  padding: 16px 24px;
+  background: #0A0B09;
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.klarna-payment-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.klarna-payment-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.klarna-payment-btn img {
+  height: 24px;
+}
+
+.klarna-subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #333;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Trouver la section des moyens de paiement (après PayPal)
+  var paymentSection = document.querySelector('[data-node-type="commerce-checkout-billing-address-wrapper"]') 
+    || document.querySelector('.w-commerce-commercecheckoutbillingaddresswrapper')
+    || document.querySelector('form');
+  
+  // Ou après le groupe de paiement Stripe
+  var stripeSection = document.querySelector('.w-commerce-commercecheckoutcardnumber');
+  if (stripeSection) {
+    paymentSection = stripeSection.closest('.w-commerce-commercecheckoutpaymentinfowrapper') 
+      || stripeSection.parentElement.parentElement.parentElement;
+  }
+
+  if (paymentSection) {
+    // Créer le bouton Klarna
+    var klarnaDiv = document.createElement('div');
+    klarnaDiv.className = 'klarna-payment-option';
+    klarnaDiv.innerHTML = `
+      <button type="button" class="klarna-payment-btn" onclick="klarnaCheckout()">
+        <img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna">
+        Payer en 3x sans frais
+      </button>
+      <div class="klarna-subtitle">Divisez votre paiement en 3 fois sans frais avec Klarna</div>
+    `;
+    
+    // Insérer après la section paiement
+    paymentSection.parentNode.insertBefore(klarnaDiv, paymentSection.nextSibling);
+  }
+});
+
+function klarnaCheckout() {
+  var btn = document.querySelector('.klarna-payment-btn');
+  var originalHTML = btn.innerHTML;
+  btn.innerHTML = '<span>Chargement...</span>';
+  btn.disabled = true;
+
+  var items = [];
+  var els = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+
+  for (var i = 0; i < els.length; i++) {
+    var txt = els[i].innerText;
+    var m = txt.match(/(\d+)[,.](\d{2})/);
+    if (m) {
+      items.push({
+        name: txt.substring(0, 50),
+        price: parseFloat(m[1] + '.' + m[2]),
+        quantity: 1
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    alert('Votre panier est vide !');
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+    return;
+  }
+
+  var email = document.querySelector('input[type="email"]');
+
+  fetch('https://achzod-klarna-checkout.onrender.com/checkout', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      items: items,
+      customerEmail: email ? email.value : '',
+      successUrl: 'https://achzodcoaching.com/order-confirmation',
+      cancelUrl: 'https://achzodcoaching.com/checkout'
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      alert('Erreur: ' + (d.error || 'Veuillez réessayer'));
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+    }
+  })
+  .catch(function(e) {
+    alert('Erreur de connexion. Veuillez réessayer.');
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+  });
+}
+</script>
+

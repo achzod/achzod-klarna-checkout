@@ -1,0 +1,79 @@
+<!--
+=====================================================
+   BOUTON KLARNA EXPRESS OFFICIEL
+   A COLLER DANS WEBFLOW > CHECKOUT > CUSTOM CODE
+=====================================================
+-->
+
+<!-- SDK Klarna Express Checkout -->
+<script src="https://x.klarnacdn.net/express-button/v1/lib.js"
+  data-id="klarna-express-button"
+  data-client-id="klarna_live_client_YmZ2eWlYJCFqTUI2Lzd5eTdIQTkpTFU3ZzV1VjZTREUsZmEyZDdlMWUtNTc3Yi00ZmQ1LWFlODktZTMwNmZhYmM3YTlkLDEsWDFQQU1WMVRXSStjczFyUzViT2J2TmdubG5YSVJzUHRDUDB5dUV1TTJYQT0"
+  data-environment="production"
+  async>
+</script>
+
+<!-- Container avec bouton Klarna officiel -->
+<div id="klarna-btn-container" style="position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:15px;background:linear-gradient(135deg,#FFB3C7,#FFA0B8);box-shadow:0 -4px 20px rgba(0,0,0,0.3);">
+  <div style="max-width:500px;margin:0 auto;">
+    <klarna-express-button
+      data-locale="fr-FR"
+      data-theme="default"
+      style="width:100%;min-height:50px;">
+    </klarna-express-button>
+  </div>
+</div>
+
+<script>
+// Quand le bouton Klarna est clique
+document.addEventListener('klarna-express-button-clicked', function() {
+  klarnaGo();
+});
+
+function klarnaGo() {
+  var items = [];
+  var els = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+
+  for (var i = 0; i < els.length; i++) {
+    var txt = els[i].innerText;
+    var m = txt.match(/(\d+)[,.](\d{2})/);
+    if (m) {
+      items.push({
+        name: txt.substring(0, 50),
+        price: parseFloat(m[1] + '.' + m[2]),
+        quantity: 1
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    alert('Panier vide!');
+    location.reload();
+    return;
+  }
+
+  var email = document.querySelector('input[type="email"]');
+
+  fetch('https://achzod-klarna-checkout.onrender.com/checkout', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      items: items,
+      customerEmail: email ? email.value : ''
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      alert('Erreur: ' + d.error);
+      location.reload();
+    }
+  })
+  .catch(function(e) {
+    alert('Erreur: ' + e.message);
+    location.reload();
+  });
+}
+</script>

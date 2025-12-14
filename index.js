@@ -371,7 +371,15 @@ function findEbookLink(productName) {
     const hasWordMatch = nameWords.length > 0 && keyWords.length > 0 && 
       nameWords.some(nw => keyWords.some(kw => nw.includes(kw) || kw.includes(nw)));
     
-    if (hasFullMatch || (hasWordMatch && nameWords.length >= 2)) {
+    // Pour "shred", "perte de gras", "prise de muscles" - correspondance plus flexible
+    const isShredRelated = (cleanName.includes('shred') || cleanName.includes('perte') || cleanName.includes('gras') || cleanName.includes('muscles')) &&
+                          (cleanKey.includes('shred') || cleanKey.includes('perte') || cleanKey.includes('gras') || cleanKey.includes('muscles'));
+    
+    // Si le nom contient "ebook" ET "shred" ou "4 semaines", c'est probablement le bon ebook
+    const isEbookShred = cleanName.includes('ebook') && (cleanName.includes('shred') || cleanName.includes('4 semaines') || cleanName.includes('semaines')) &&
+                        (cleanKey.includes('shred') || cleanKey.includes('4 semaines') || cleanKey.includes('semaines'));
+    
+    if (hasFullMatch || (hasWordMatch && nameWords.length >= 2) || isShredRelated || isEbookShred) {
       console.log('✅ Ebook trouvé:', key, '->', EBOOK_LINKS[key]);
       return { name: productName, link: EBOOK_LINKS[key] };
     }

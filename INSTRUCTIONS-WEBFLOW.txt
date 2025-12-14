@@ -1,0 +1,46 @@
+# 🎯 INSTRUCTIONS SIMPLES - WEBFLOW
+
+## ✅ TOUT EST CONFIGURÉ AUTOMATIQUEMENT !
+
+Le backend est prêt, les webhooks sont créés, tout fonctionne.
+
+---
+
+## 📋 CE QUE TU DOIS FAIRE (2 MINUTES) :
+
+### 1️⃣ Ouvre le fichier `WEBFLOW-CODE-KLARNA.html`
+
+### 2️⃣ Copie TOUT le contenu
+
+### 3️⃣ Dans Webflow :
+- Va dans **Designer**
+- Clique sur la page **Checkout**
+- Clique sur l'**engrenage ⚙️** (Page Settings)
+- Section **Custom Code** > **Before </body> tag**
+- **COLLE** le code que tu as copié
+- Clique sur **Save**
+
+### 4️⃣ Publie ton site
+- Clique sur **Publish** en haut à droite
+
+---
+
+## ✅ C'EST TOUT !
+
+Maintenant :
+- **Bouton Klarna** → Redirige vers Stripe FR avec Klarna ✅
+- **Bouton normal Webflow** → Redirige vers Stripe UAE (cartes, Apple Pay, etc.) ✅
+- **Emails ebooks** → Envoyés automatiquement dans les deux cas ✅
+
+---
+
+## 🧪 TESTE :
+
+1. Va sur https://achzodcoaching.com/checkout
+2. Ajoute un produit
+3. Tu verras le bouton **"Payer en 3x sans frais"** en bas
+4. Clique dessus → Tu seras redirigé vers Klarna
+5. Vérifie que l'email ebook arrive bien
+
+**C'EST BON BRO ! 🔥**
+

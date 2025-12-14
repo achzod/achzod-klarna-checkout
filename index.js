@@ -196,6 +196,19 @@ app.post('/checkout-klarna', async (req, res) => {
       return res.status(400).json({ error: 'Panier vide' });
     }
 
+    // Klarna impose souvent un montant minimum (surtout sur le "pay in 3").
+    // Si tu appliques un code promo très agressif (ex: -95%), le total devient trop bas et
+    // l'écran Stripe/Klarna peut sembler "bloqué" / bouton non cliquable.
+    const computeItemsTotal = () =>
+      items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+    const effectiveTotal = Number(totalAmount) > 0 ? Number(totalAmount) : computeItemsTotal();
+    const KLARNA_MIN_TOTAL_EUR = Number(process.env.KLARNA_MIN_TOTAL_EUR || 35);
+    if (effectiveTotal > 0 && effectiveTotal < KLARNA_MIN_TOTAL_EUR) {
+      return res.status(400).json({
+        error: `Klarna indisponible en dessous de ${KLARNA_MIN_TOTAL_EUR}€ (total actuel: ${effectiveTotal.toFixed(2)}€). Utilise Carte/PayPal ou réduis la remise.`,
+      });
+    }
+
     let lineItems = [];
 
     // Si un total avec réduction est fourni, l'utiliser

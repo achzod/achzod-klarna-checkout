@@ -321,13 +321,17 @@ app.post('/checkout-klarna', async (req, res) => {
       }));
     }
 
+    // Utiliser {CHECKOUT_SESSION_ID} dans l'URL de success pour que Stripe le remplace automatiquement
+    const baseSuccessUrl = successUrl || 'https://achzodcoaching.com/order-confirmation';
+    const successUrlWithSessionId = `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`;
+    
     const sessionConfig = {
       // Card en premier pour éviter les blocages Klarna
       // Si Klarna est disponible, Stripe l'affichera automatiquement
       payment_method_types: ['card', 'klarna'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
+      success_url: successUrlWithSessionId,
       cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
       billing_address_collection: 'required',
       locale: 'fr',
@@ -352,34 +356,10 @@ app.post('/checkout-klarna', async (req, res) => {
       return res.status(500).json({ error: 'Configuration Stripe FR invalide. Contacte le support.' });
     }
     
-    // Créer la session avec l'URL de success incluant le session_id (on le mettra après)
+    // Créer la session - Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
     const session = await stripeFR.checkout.sessions.create(sessionConfig);
     
-    // Ajouter session_id dans l'URL de success pour récupérer les données sur la page de confirmation
-    const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
-    
-    // Mettre à jour la session avec la bonne URL
-    // Vérifier que la méthode update existe
-    if (typeof stripeFR.checkout.sessions.update !== 'function') {
-      console.error('❌ stripeFR.checkout.sessions.update n\'est pas une fonction !');
-      // Si update ne fonctionne pas, utiliser l'URL de la session créée (elle contiendra le session_id dans l'URL de retour)
-      // On peut aussi recréer la session avec la bonne URL directement
-      const sessionConfigWithUrl = { ...sessionConfig, success_url: successUrlWithSession };
-      const finalSession = await stripeFR.checkout.sessions.create(sessionConfigWithUrl);
-      // Supprimer l'ancienne session
-      try {
-        await stripeFR.checkout.sessions.expire(session.id);
-      } catch (e) {
-        // Ignorer l'erreur si la session ne peut pas être expirée
-      }
-      return res.json({ url: finalSession.url });
-    }
-    
-    const finalSession = await stripeFR.checkout.sessions.update(session.id, {
-      success_url: successUrlWithSession
-    });
-    
-    res.json({ url: finalSession.url });
+    res.json({ url: session.url });
 
   } catch (error) {
     console.error('Erreur Stripe FR (Klarna):', error);

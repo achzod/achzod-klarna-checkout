@@ -164,6 +164,13 @@ app.post('/checkout', async (req, res) => {
       cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
       billing_address_collection: 'required',
       locale: 'fr',
+      // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
+      metadata: {
+        merchant_name: 'achzodcoaching',
+        business_name: 'AchzodCoaching'
+      }
+      // Note: Ne pas définir receipt_email = pas de reçu Stripe automatique
+      // Les reçus Stripe doivent être désactivés dans le dashboard Stripe
     };
 
     // Ajouter l'email du client (pour pré-remplir le formulaire, PAS pour le reçu Stripe)
@@ -253,6 +260,13 @@ app.post('/checkout-klarna', async (req, res) => {
           enabled: true,
         },
       },
+      // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
+      metadata: {
+        merchant_name: 'achzodcoaching',
+        business_name: 'AchzodCoaching'
+      }
+      // Note: Ne pas définir receipt_email = pas de reçu Stripe automatique
+      // Les reçus Stripe doivent être désactivés dans le dashboard Stripe
     };
 
     if (customerEmail && customerEmail.trim()) {
@@ -358,7 +372,7 @@ function generateEmailHTML(customerName, ebooks, totalAmount) {
                 <tr>
                   <td align="center" style="padding-bottom: 25px;">
                     <h2 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">
-                      Merci pour ta commande${customerName ? ', ' + customerName : ''} 🔥
+                      Merci pour ta commande 🔥
                     </h2>
                   </td>
                 </tr>
@@ -541,7 +555,7 @@ app.post('/webhook', async (req, res) => {
 
   try {
     if (webhookSecret) {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      event = stripeUAE.webhooks.constructEvent(req.body, sig, webhookSecret);
     } else {
       // Sans webhook secret (pour les tests)
       event = JSON.parse(req.body.toString());
@@ -566,7 +580,7 @@ app.post('/webhook', async (req, res) => {
     if (customerEmail) {
       // Récupérer les line items
       try {
-        const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+        const lineItems = await stripeUAE.checkout.sessions.listLineItems(session.id);
         const ebooks = [];
         const productNames = [];
         
@@ -580,13 +594,13 @@ app.post('/webhook', async (req, res) => {
           }
         }
         
-        // Envoyer notification à Achzod pour TOUTES les commandes Klarna
-        await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, paymentMethod);
+        // Envoyer notification à Achzod pour TOUTES les commandes
+        await sendOrderNotification(customerEmail, '', productNames, totalAmount, paymentMethod);
         
         // Si des ebooks ont été trouvés, envoyer l'email au client avec les liens
         if (ebooks.length > 0) {
-          const firstName = customerName.split(' ')[0] || '';
-          await sendEbookEmail(customerEmail, firstName, ebooks, totalAmount);
+          // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
+          await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
         }
       } catch (error) {
         console.error('Erreur récupération line items:', error);
@@ -644,12 +658,12 @@ app.post('/webhook-klarna', async (req, res) => {
       
       // Envoyer notification à Achzod
       const paymentMethod = 'Klarna (Stripe FR)';
-      await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, paymentMethod);
+      await sendOrderNotification(customerEmail, '', productNames, totalAmount, paymentMethod);
       
       // Si des ebooks ont été trouvés, envoyer l'email au client
       if (ebooks.length > 0) {
-        const firstName = customerName.split(' ')[0] || '';
-        await sendEbookEmail(customerEmail, firstName, ebooks, totalAmount);
+        // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
+        await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
       }
     } catch (error) {
       console.error('Erreur webhook FR:', error);

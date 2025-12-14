@@ -1,0 +1,153 @@
+<!-- 
+INSTRUCTIONS : 
+1. Va dans Webflow Designer > Pages > Checkout > Settings (engrenage)
+2. Custom Code > Before </body> tag
+3. SUPPRIME l'ancien code Klarna
+4. COLLE ce nouveau code
+5. Publie le site
+-->
+
+<style>
+/* Cache la barre fixe en bas */
+#tabby-btn-container { display: none !important; }
+
+/* Style du bouton Tabby dans la section paiement */
+.tabby-payment-option {
+  margin-top: 20px;
+  padding: 15px;
+  background: linear-gradient(135deg, #FFB3C7 0%, #FFA0B8 100%);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.tabby-payment-btn {
+  width: 100%;
+  padding: 16px 24px;
+  background: #0A0B09;
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tabby-payment-btn:hover {
+  background: #1a1b19;
+  transform: translateY(-2px);
+}
+
+.tabby-payment-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tabby-info {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #0A0B09;
+  font-weight: 500;
+}
+</style>
+
+<script>
+(function() {
+  console.log('🚀 Script Tabby chargé');
+
+  // Attendre que la page soit chargée
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ DOM chargé, recherche du formulaire...');
+
+    // Trouver la section de paiement Webflow
+    const paymentSection = document.querySelector('[data-node-type="commerce-checkout-payment-info-wrapper"]');
+    
+    if (!paymentSection) {
+      console.warn('⚠️ Section de paiement non trouvée');
+      return;
+    }
+
+    console.log('✅ Section de paiement trouvée');
+
+    // Créer le bouton Tabby
+    const tabbyContainer = document.createElement('div');
+    tabbyContainer.className = 'tabby-payment-option';
+    tabbyContainer.innerHTML = `
+      <button type="button" class="tabby-payment-btn" id="tabby-checkout-btn">
+        💳 Payer avec Tabby - 4x sans frais
+      </button>
+      <div class="tabby-info">
+        Payez en 4 fois sans frais avec Tabby 🇦🇪
+      </div>
+    `;
+
+    // Ajouter le bouton après la section de paiement
+    paymentSection.parentElement.insertBefore(tabbyContainer, paymentSection.nextSibling);
+
+    // Gérer le clic sur le bouton Tabby
+    const tabbyBtn = document.getElementById('tabby-checkout-btn');
+    
+    tabbyBtn.addEventListener('click', async function() {
+      console.log('🔄 Clic sur le bouton Tabby');
+      
+      tabbyBtn.disabled = true;
+      tabbyBtn.textContent = 'Redirection vers Tabby...';
+
+      try {
+        // Récupérer les items du panier Webflow
+        const cart = window.Webflow?.commerce?.cart;
+        
+        if (!cart || !cart.items || cart.items.length === 0) {
+          alert('Votre panier est vide');
+          tabbyBtn.disabled = false;
+          tabbyBtn.textContent = '💳 Payer avec Tabby - 4x sans frais';
+          return;
+        }
+
+        // Récupérer l'email du client
+        const emailInput = document.querySelector('input[type="email"]');
+        const customerEmail = emailInput ? emailInput.value : '';
+
+        // Préparer les données pour Stripe
+        const items = cart.items.map(item => ({
+          name: item.product.name,
+          price: item.product.price,
+          quantity: item.count
+        }));
+
+        console.log('📦 Items du panier:', items);
+
+        // Appeler l'API Stripe avec Tabby
+        const response = await fetch('https://achzod-klarna-checkout.onrender.com/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: items,
+            customerEmail: customerEmail,
+            successUrl: 'https://achzodcoaching.com/order-confirmation',
+            cancelUrl: 'https://achzodcoaching.com/checkout'
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.url) {
+          console.log('✅ Session Tabby créée, redirection...');
+          window.location.href = data.url;
+        } else {
+          throw new Error('Pas d\'URL de redirection');
+        }
+
+      } catch (error) {
+        console.error('❌ Erreur Tabby:', error);
+        alert('Erreur lors de la création de la session Tabby. Veuillez réessayer.');
+        tabbyBtn.disabled = false;
+        tabbyBtn.textContent = '💳 Payer avec Tabby - 4x sans frais';
+      }
+    });
+
+    console.log('✅ Bouton Tabby configuré');
+  });
+})();
+</script>
+

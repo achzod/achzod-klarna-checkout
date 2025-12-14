@@ -1,68 +1,68 @@
 const Stripe = require('stripe');
 
-// La clé API Stripe doit être configurée dans les variables d'environnement Render
+// La clé API Stripe UAE
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Mapping des produits Webflow vers les Price IDs Stripe
 const PRICE_MAPPING = {
   // Coaching
-  'coaching sans suivi': { priceId: 'price_1SY91kINPqlywHW9TSOl2y0g', amount: 9900 },
-  'starter': { priceId: 'price_1SY91lINPqlywHW9WSRtSqRk', amount: 14900 },
+  'coaching sans suivi': { priceId: 'price_1SdvMiBTm0rdlVFq1quX3O14', amount: 9900 },
+  'starter': { priceId: 'price_1SdvMiBTm0rdlVFqqNzpgaPc', amount: 14900 },
 
   // Essential
-  'essential 4 semaines': { priceId: 'price_1SY91mINPqlywHW9gEaZhZb2', amount: 24900 },
-  'essential 8 semaines': { priceId: 'price_1SY91nINPqlywHW96BXxKqcS', amount: 39900 },
-  'essential 12 semaines': { priceId: 'price_1SY91oINPqlywHW9bhipMEWg', amount: 54900 },
-  '4 semaines - essential': { priceId: 'price_1SY91mINPqlywHW9gEaZhZb2', amount: 24900 },
-  '8 semaines - essential': { priceId: 'price_1SY91nINPqlywHW96BXxKqcS', amount: 39900 },
-  '12 semaines - essential': { priceId: 'price_1SY91oINPqlywHW9bhipMEWg', amount: 54900 },
+  'essential 4 semaines': { priceId: 'price_1SdvMiBTm0rdlVFqLfsmZktn', amount: 24900 },
+  'essential 8 semaines': { priceId: 'price_1SdvMhBTm0rdlVFqH5DLanUx', amount: 39900 },
+  'essential 12 semaines': { priceId: 'price_1SdvMhBTm0rdlVFqwk0q6GSp', amount: 54900 },
+  '4 semaines - essential': { priceId: 'price_1SdvMiBTm0rdlVFqLfsmZktn', amount: 24900 },
+  '8 semaines - essential': { priceId: 'price_1SdvMhBTm0rdlVFqH5DLanUx', amount: 39900 },
+  '12 semaines - essential': { priceId: 'price_1SdvMhBTm0rdlVFqwk0q6GSp', amount: 54900 },
 
   // Elite
-  'elite 4 semaines': { priceId: 'price_1SY91pINPqlywHW97WqPrzev', amount: 39900 },
-  'elite 8 semaines': { priceId: 'price_1SY91rINPqlywHW9WvouAXbj', amount: 64900 },
-  'elite 12 semaines': { priceId: 'price_1SY91sINPqlywHW9tSyv1mIS', amount: 89900 },
-  '4 semaines - elite': { priceId: 'price_1SY91pINPqlywHW97WqPrzev', amount: 39900 },
-  '8 semaines - elite': { priceId: 'price_1SY91rINPqlywHW9WvouAXbj', amount: 64900 },
-  '12 semaines - elite': { priceId: 'price_1SY91sINPqlywHW9tSyv1mIS', amount: 89900 },
+  'elite 4 semaines': { priceId: 'price_1SdvMgBTm0rdlVFqzHfzhM8K', amount: 39900 },
+  'elite 8 semaines': { priceId: 'price_1SdvMgBTm0rdlVFqN0ApjtgB', amount: 64900 },
+  'elite 12 semaines': { priceId: 'price_1SdvMgBTm0rdlVFqstDCjSEg', amount: 89900 },
+  '4 semaines - elite': { priceId: 'price_1SdvMgBTm0rdlVFqzHfzhM8K', amount: 39900 },
+  '8 semaines - elite': { priceId: 'price_1SdvMgBTm0rdlVFqN0ApjtgB', amount: 64900 },
+  '12 semaines - elite': { priceId: 'price_1SdvMgBTm0rdlVFqstDCjSEg', amount: 89900 },
 
   // Private Lab
-  'private lab 4 semaines': { priceId: 'price_1SY91tINPqlywHW93PI9jF4C', amount: 49900 },
-  'private lab 8 semaines': { priceId: 'price_1SY91vINPqlywHW9iHAGvybY', amount: 79900 },
-  'private lab 12 semaines': { priceId: 'price_1SY91wINPqlywHW9BtxvHp3S', amount: 119900 },
-  '4 semaines - private lab': { priceId: 'price_1SY91tINPqlywHW93PI9jF4C', amount: 49900 },
-  '8 semaines - private lab': { priceId: 'price_1SY91vINPqlywHW9iHAGvybY', amount: 79900 },
-  '12 semaines - private lab': { priceId: 'price_1SY91wINPqlywHW9BtxvHp3S', amount: 119900 },
-  'achzod private lab 4 semaines': { priceId: 'price_1SY91tINPqlywHW93PI9jF4C', amount: 49900 },
-  'achzod private lab 8 semaines': { priceId: 'price_1SY91vINPqlywHW9iHAGvybY', amount: 79900 },
-  'achzod private lab 12 semaines': { priceId: 'price_1SY91wINPqlywHW9BtxvHp3S', amount: 119900 },
+  'private lab 4 semaines': { priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', amount: 49900 },
+  'private lab 8 semaines': { priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', amount: 79900 },
+  'private lab 12 semaines': { priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', amount: 119900 },
+  '4 semaines - private lab': { priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', amount: 49900 },
+  '8 semaines - private lab': { priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', amount: 79900 },
+  '12 semaines - private lab': { priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', amount: 119900 },
+  'achzod private lab 4 semaines': { priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', amount: 49900 },
+  'achzod private lab 8 semaines': { priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', amount: 79900 },
+  'achzod private lab 12 semaines': { priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', amount: 119900 },
 
   // Ebooks
-  'anabolic code': { priceId: 'price_1SY91xINPqlywHW9qTdCvEVP', amount: 7900 },
-  'libérer son potentiel génétique': { priceId: 'price_1SY91zINPqlywHW9kXzV1o59', amount: 4900 },
-  'liberer son potentiel genetique': { priceId: 'price_1SY91zINPqlywHW9kXzV1o59', amount: 4900 },
-  '4 semaines pour être shred': { priceId: 'price_1SY920INPqlywHW9Z5Teyljl', amount: 4900 },
-  '4 semaines pour etre shred': { priceId: 'price_1SY920INPqlywHW9Z5Teyljl', amount: 4900 },
-  'bioénergétique': { priceId: 'price_1SY921INPqlywHW99DvCbajf', amount: 5900 },
-  'bioenergetique': { priceId: 'price_1SY921INPqlywHW99DvCbajf', amount: 5900 },
-  'bioénergétique et timing': { priceId: 'price_1SY921INPqlywHW99DvCbajf', amount: 5900 },
-  'bioenergetique et timing de la nutrition': { priceId: 'price_1SY921INPqlywHW99DvCbajf', amount: 5900 },
+  'anabolic code': { priceId: 'price_1SdvMeBTm0rdlVFqZEmcaDNm', amount: 7900 },
+  'libérer son potentiel génétique': { priceId: 'price_1SdvMeBTm0rdlVFqTi8xNboT', amount: 4900 },
+  'liberer son potentiel genetique': { priceId: 'price_1SdvMeBTm0rdlVFqTi8xNboT', amount: 4900 },
+  '4 semaines pour être shred': { priceId: 'price_1SdvMdBTm0rdlVFqHi638498', amount: 4900 },
+  '4 semaines pour etre shred': { priceId: 'price_1SdvMdBTm0rdlVFqHi638498', amount: 4900 },
+  'bioénergétique': { priceId: 'price_1SdvMdBTm0rdlVFqboosk1lb', amount: 5900 },
+  'bioenergetique': { priceId: 'price_1SdvMdBTm0rdlVFqboosk1lb', amount: 5900 },
+  'bioénergétique et timing': { priceId: 'price_1SdvMdBTm0rdlVFqboosk1lb', amount: 5900 },
+  'bioenergetique et timing de la nutrition': { priceId: 'price_1SdvMdBTm0rdlVFqboosk1lb', amount: 5900 },
 };
 
 // Mapping par prix (fallback)
 const PRICE_BY_AMOUNT = {
-  9900: 'price_1SY91kINPqlywHW9TSOl2y0g',   // Sans Suivi 99€
-  14900: 'price_1SY91lINPqlywHW9WSRtSqRk',  // Starter 149€
-  24900: 'price_1SY91mINPqlywHW9gEaZhZb2',  // Essential 4 sem 249€
-  39900: 'price_1SY91nINPqlywHW96BXxKqcS',  // Essential 8 sem 399€ (ou Elite 4 sem)
-  54900: 'price_1SY91oINPqlywHW9bhipMEWg',  // Essential 12 sem 549€
-  64900: 'price_1SY91rINPqlywHW9WvouAXbj',  // Elite 8 sem 649€
-  89900: 'price_1SY91sINPqlywHW9tSyv1mIS',  // Elite 12 sem 899€
-  49900: 'price_1SY91tINPqlywHW93PI9jF4C',  // Private Lab 4 sem 499€
-  79900: 'price_1SY91vINPqlywHW9iHAGvybY',  // Private Lab 8 sem 799€
-  119900: 'price_1SY91wINPqlywHW9BtxvHp3S', // Private Lab 12 sem 1199€
-  7900: 'price_1SY91xINPqlywHW9qTdCvEVP',   // Anabolic Code 79€
-  4900: 'price_1SY91zINPqlywHW9kXzV1o59',   // Ebooks 49€
-  5900: 'price_1SY921INPqlywHW99DvCbajf',   // Bioénergétique 59€
+  9900: 'price_1SdvMiBTm0rdlVFq1quX3O14',   // Sans Suivi 99€
+  14900: 'price_1SdvMiBTm0rdlVFqqNzpgaPc',  // Starter 149€
+  24900: 'price_1SdvMiBTm0rdlVFqLfsmZktn',  // Essential 4 sem 249€
+  39900: 'price_1SdvMhBTm0rdlVFqH5DLanUx',  // Essential 8 sem 399€ (ou Elite 4 sem)
+  54900: 'price_1SdvMhBTm0rdlVFqwk0q6GSp',  // Essential 12 sem 549€
+  64900: 'price_1SdvMgBTm0rdlVFqN0ApjtgB',  // Elite 8 sem 649€
+  89900: 'price_1SdvMgBTm0rdlVFqstDCjSEg',  // Elite 12 sem 899€
+  49900: 'price_1SdvMfBTm0rdlVFq3DbslVyj',  // Private Lab 4 sem 499€
+  79900: 'price_1SdvMfBTm0rdlVFq1RDNoRrL',  // Private Lab 8 sem 799€
+  119900: 'price_1SdvMeBTm0rdlVFqtP697rjn', // Private Lab 12 sem 1199€
+  7900: 'price_1SdvMeBTm0rdlVFqZEmcaDNm',   // Anabolic Code 79€
+  4900: 'price_1SdvMeBTm0rdlVFqTi8xNboT',   // Ebooks 49€
+  5900: 'price_1SdvMdBTm0rdlVFqboosk1lb',   // Bioénergétique 59€
 };
 
 function findPriceId(productName, amount) {
@@ -142,7 +142,7 @@ module.exports = async (req, res) => {
 
     // Préparer les options de la session
     const sessionOptions = {
-      payment_method_types: ['card', 'klarna'],
+      payment_method_types: ['card', 'link'],
       line_items: lineItems,
       mode: 'payment',
       success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',

@@ -1,0 +1,533 @@
+{
+  "products": [
+    {
+      "id": "prod_TVPszIOIeQg48X",
+      "name": "Achzod Lab",
+      "description": "Accès aux archives newsletters premium Achzod",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9JpONAteH7lK",
+      "name": "Private Lab 12 semaines",
+      "description": "Achzod Private Lab - 12 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9J5bUbAAK1aF",
+      "name": "Private Lab 8 semaines",
+      "description": "Achzod Private Lab - 8 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9J2QcWsDEDmw",
+      "name": "Private Lab 4 semaines",
+      "description": "Achzod Private Lab - 4 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9Jq0twPRUZcA",
+      "name": "Elite 12 semaines",
+      "description": "Coaching Elite - 12 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9JQHH1g2kcA9",
+      "name": "Elite 8 semaines",
+      "description": "Coaching Elite - 8 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9Ja8ci1r1Ctc",
+      "name": "Elite 4 semaines",
+      "description": "Coaching Elite - 4 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9JIbL6Dz27BE",
+      "name": "Essential 12 semaines",
+      "description": "Coaching Essential - 12 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9JabARKBnuOj",
+      "name": "Essential 8 semaines",
+      "description": "Coaching Essential - 8 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9JVatgTWlJAD",
+      "name": "Essential 4 semaines",
+      "description": "Coaching Essential - 4 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IBKKHyMIHzI",
+      "name": "Ebook Bioenergetique et timing",
+      "description": "Bioenergetique et timing de la nutrition",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IuVd0sMFQXZ",
+      "name": "Ebook 4 Semaines SHRED",
+      "description": "Perte de gras et prise de muscles en 4 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IWQDETOWjg6",
+      "name": "Ebook Liberer son potentiel genetique",
+      "description": "Perte de gras et prise de muscles en 10 semaines",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IoAB00LXdXV",
+      "name": "Ebook Anabolic Code",
+      "description": "La science interdite de l HGH de l IGF-1 et des peptides",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9I0PVoskHdoK",
+      "name": "Coaching Sans Suivi",
+      "description": "Programme coaching sans suivi",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IXvg2nKNuTi",
+      "name": "Achzod Private Lab",
+      "description": "Formule VIP - Accompagnement exclusif 24/7",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IoAQ3iNuOCt",
+      "name": "Coaching Elite",
+      "description": "Formule Elite - Accompagnement premium",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IKAdyBJj9XM",
+      "name": "Coaching Essential",
+      "description": "Formule Essential - Accompagnement complet",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV9IKx5NRoIZrZ",
+      "name": "Coaching Starter",
+      "description": "Formule Starter - Accompagnement coaching",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV8SHVf4h6aVEf",
+      "name": "Pack 3 analyses - Bilan Sanguin",
+      "description": "3 analyses complètes IA avec suivi trimestriel",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV8SiLiQWOltqP",
+      "name": "Pack 2 analyses - Bilan Sanguin",
+      "description": "2 analyses complètes IA avec suivi évolution",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_TV8SWuDUlE7hAr",
+      "name": "Analyse unique - Bilan Sanguin",
+      "description": "Analyse complète IA de votre bilan sanguin avec recommandations personnalisées",
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "6rvketb264t62t356tj32rv3c8ukgt9k6xgk2rtd6rvkgc35cmvkartrchjk4c9k6guk8ctkc9gk2dg",
+      "name": "Newsletter",
+      "description": null,
+      "active": true,
+      "metadata": {
+        "publication": "6780ee75c8de21345433ba16",
+        "site": "5fd0a9c4883524725ec72282"
+      },
+      "images": [],
+      "type": "service"
+    },
+    {
+      "id": "prod_IpfeUGqzZXI8ZA",
+      "name": "Suivi 4 semaines",
+      "description": null,
+      "active": true,
+      "metadata": {},
+      "images": [],
+      "type": "service"
+    }
+  ],
+  "prices": [
+    {
+      "id": "price_1SYP2XINPqlywHW9cRnHOUmq",
+      "product_id": "prod_TVPszIOIeQg48X",
+      "product_name": "Achzod Lab",
+      "currency": "eur",
+      "unit_amount": 900,
+      "recurring": {
+        "aggregate_usage": null,
+        "interval": "month",
+        "interval_count": 1,
+        "meter": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+      },
+      "type": "recurring",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY921INPqlywHW99DvCbajf",
+      "product_id": "prod_TV9IBKKHyMIHzI",
+      "product_name": "Ebook Bioenergetique et timing",
+      "currency": "eur",
+      "unit_amount": 5900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY920INPqlywHW9Z5Teyljl",
+      "product_id": "prod_TV9IuVd0sMFQXZ",
+      "product_name": "Ebook 4 Semaines SHRED",
+      "currency": "eur",
+      "unit_amount": 4900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91zINPqlywHW9kXzV1o59",
+      "product_id": "prod_TV9IWQDETOWjg6",
+      "product_name": "Ebook Liberer son potentiel genetique",
+      "currency": "eur",
+      "unit_amount": 4900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91xINPqlywHW9qTdCvEVP",
+      "product_id": "prod_TV9IoAB00LXdXV",
+      "product_name": "Ebook Anabolic Code",
+      "currency": "eur",
+      "unit_amount": 7900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91wINPqlywHW9BtxvHp3S",
+      "product_id": "prod_TV9JpONAteH7lK",
+      "product_name": "Private Lab 12 semaines",
+      "currency": "eur",
+      "unit_amount": 119900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91vINPqlywHW9iHAGvybY",
+      "product_id": "prod_TV9J5bUbAAK1aF",
+      "product_name": "Private Lab 8 semaines",
+      "currency": "eur",
+      "unit_amount": 79900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91tINPqlywHW93PI9jF4C",
+      "product_id": "prod_TV9J2QcWsDEDmw",
+      "product_name": "Private Lab 4 semaines",
+      "currency": "eur",
+      "unit_amount": 49900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91sINPqlywHW9tSyv1mIS",
+      "product_id": "prod_TV9Jq0twPRUZcA",
+      "product_name": "Elite 12 semaines",
+      "currency": "eur",
+      "unit_amount": 89900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91rINPqlywHW9WvouAXbj",
+      "product_id": "prod_TV9JQHH1g2kcA9",
+      "product_name": "Elite 8 semaines",
+      "currency": "eur",
+      "unit_amount": 64900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91pINPqlywHW97WqPrzev",
+      "product_id": "prod_TV9Ja8ci1r1Ctc",
+      "product_name": "Elite 4 semaines",
+      "currency": "eur",
+      "unit_amount": 39900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91oINPqlywHW9bhipMEWg",
+      "product_id": "prod_TV9JIbL6Dz27BE",
+      "product_name": "Essential 12 semaines",
+      "currency": "eur",
+      "unit_amount": 54900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91nINPqlywHW96BXxKqcS",
+      "product_id": "prod_TV9JabARKBnuOj",
+      "product_name": "Essential 8 semaines",
+      "currency": "eur",
+      "unit_amount": 39900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91mINPqlywHW9gEaZhZb2",
+      "product_id": "prod_TV9JVatgTWlJAD",
+      "product_name": "Essential 4 semaines",
+      "currency": "eur",
+      "unit_amount": 24900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91lINPqlywHW9WSRtSqRk",
+      "product_id": "prod_TV9IKx5NRoIZrZ",
+      "product_name": "Coaching Starter",
+      "currency": "eur",
+      "unit_amount": 14900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY91kINPqlywHW9TSOl2y0g",
+      "product_id": "prod_TV9I0PVoskHdoK",
+      "product_name": "Coaching Sans Suivi",
+      "currency": "eur",
+      "unit_amount": 9900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY8BZINPqlywHW9TDd54xuw",
+      "product_id": "prod_TV8SHVf4h6aVEf",
+      "product_name": "Pack 3 analyses - Bilan Sanguin",
+      "currency": "eur",
+      "unit_amount": 39900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY8BZINPqlywHW9E08Qx5o3",
+      "product_id": "prod_TV8SiLiQWOltqP",
+      "product_name": "Pack 2 analyses - Bilan Sanguin",
+      "currency": "eur",
+      "unit_amount": 29900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "price_1SY8BYINPqlywHW93I1lQUwj",
+      "product_id": "prod_TV8SWuDUlE7hAr",
+      "product_name": "Analyse unique - Bilan Sanguin",
+      "currency": "eur",
+      "unit_amount": 19900,
+      "recurring": null,
+      "type": "one_time",
+      "active": true,
+      "metadata": {}
+    },
+    {
+      "id": "plan_RYmU9bc0tjFN53",
+      "product_id": "6rvketb264t62t356tj32rv3c8ukgt9k6xgk2rtd6rvkgc35cmvkartrchjk4c9k6guk8ctkc9gk2dg",
+      "product_name": "Newsletter",
+      "currency": "eur",
+      "unit_amount": 199,
+      "recurring": {
+        "aggregate_usage": null,
+        "interval": "month",
+        "interval_count": 1,
+        "meter": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+      },
+      "type": "recurring",
+      "active": true,
+      "metadata": {
+        "publication": "6780ee75c8de21345433ba16",
+        "site": "5fd0a9c4883524725ec72282"
+      }
+    },
+    {
+      "id": "price_1IE0ImINPqlywHW9ZYLH8kxq",
+      "product_id": "prod_IpfeUGqzZXI8ZA",
+      "product_name": "Suivi 4 semaines",
+      "currency": "eur",
+      "unit_amount": 12900,
+      "recurring": {
+        "aggregate_usage": null,
+        "interval": "month",
+        "interval_count": 1,
+        "meter": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+      },
+      "type": "recurring",
+      "active": true,
+      "metadata": {}
+    }
+  ],
+  "webhooks": [
+    {
+      "id": "we_1SZhU8INPqlywHW9zeHwKkqf",
+      "url": "https://achzod-klarna-checkout.onrender.com/webhook",
+      "enabled_events": [
+        "checkout.session.completed"
+      ],
+      "status": "enabled",
+      "description": null
+    },
+    {
+      "id": "we_1SYPKkINPqlywHW9MxuPHC01",
+      "url": "https://achzod-lab.onrender.com/webhook",
+      "enabled_events": [
+        "checkout.session.completed",
+        "customer.subscription.deleted",
+        "customer.subscription.updated"
+      ],
+      "status": "enabled",
+      "description": null
+    },
+    {
+      "id": "we_1Qg0X3INPqlywHW9zNbd2mQx",
+      "url": "https://datafa.st/api/websites/677fb6ff9006e6398a5f3867/webhook/stripe",
+      "enabled_events": [
+        "checkout.session.completed",
+        "charge.succeeded",
+        "charge.refunded"
+      ],
+      "status": "disabled",
+      "description": null
+    }
+  ],
+  "payment_methods": [
+    "bancontact_payments",
+    "blik_payments",
+    "card_payments",
+    "cartes_bancaires_payments",
+    "eps_payments",
+    "giropay_payments",
+    "ideal_payments",
+    "klarna_payments",
+    "link_payments",
+    "p24_payments",
+    "revolut_pay_payments",
+    "sepa_bank_transfer_payments",
+    "sepa_debit_payments",
+    "sofort_payments",
+    "transfers",
+    "twint_payments",
+    "us_bank_transfer_payments"
+  ],
+  "exported_at": "2025-12-13T15:31:19.379Z"
+}

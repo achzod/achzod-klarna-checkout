@@ -238,9 +238,9 @@ app.post('/checkout-klarna', async (req, res) => {
     }
 
     const sessionConfig = {
-      // Klarna en priorité, mais card en fallback si Klarna n'est pas disponible
-      // (ex: géolocalisation, restrictions Klarna, etc.)
-      payment_method_types: ['klarna', 'card'],
+      // Card en premier pour éviter les blocages Klarna
+      // Si Klarna est disponible, Stripe l'affichera automatiquement
+      payment_method_types: ['card', 'klarna'],
       line_items: lineItems,
       mode: 'payment',
       success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
@@ -249,6 +249,12 @@ app.post('/checkout-klarna', async (req, res) => {
       locale: 'fr',
       // Expiration plus longue pour éviter les sessions expirées
       expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
+      // Forcer l'affichage de Klarna si disponible
+      payment_method_options: {
+        klarna: {
+          enabled: true,
+        },
+      },
     };
 
     if (customerEmail && customerEmail.trim()) {

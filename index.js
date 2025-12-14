@@ -346,13 +346,35 @@ app.post('/checkout-klarna', async (req, res) => {
       sessionConfig.customer_email = customerEmail.trim();
     }
 
-    // Créer la session d'abord
+    // Vérifier que stripeFR est bien initialisé
+    if (!stripeFR || typeof stripeFR.checkout === 'undefined') {
+      console.error('❌ stripeFR non initialisé correctement !');
+      return res.status(500).json({ error: 'Configuration Stripe FR invalide. Contacte le support.' });
+    }
+    
+    // Créer la session avec l'URL de success incluant le session_id (on le mettra après)
     const session = await stripeFR.checkout.sessions.create(sessionConfig);
     
     // Ajouter session_id dans l'URL de success pour récupérer les données sur la page de confirmation
     const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
     
     // Mettre à jour la session avec la bonne URL
+    // Vérifier que la méthode update existe
+    if (typeof stripeFR.checkout.sessions.update !== 'function') {
+      console.error('❌ stripeFR.checkout.sessions.update n\'est pas une fonction !');
+      // Si update ne fonctionne pas, utiliser l'URL de la session créée (elle contiendra le session_id dans l'URL de retour)
+      // On peut aussi recréer la session avec la bonne URL directement
+      const sessionConfigWithUrl = { ...sessionConfig, success_url: successUrlWithSession };
+      const finalSession = await stripeFR.checkout.sessions.create(sessionConfigWithUrl);
+      // Supprimer l'ancienne session
+      try {
+        await stripeFR.checkout.sessions.expire(session.id);
+      } catch (e) {
+        // Ignorer l'erreur si la session ne peut pas être expirée
+      }
+      return res.json({ url: finalSession.url });
+    }
+    
     const finalSession = await stripeFR.checkout.sessions.update(session.id, {
       success_url: successUrlWithSession
     });

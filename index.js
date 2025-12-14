@@ -716,6 +716,61 @@ app.post('/webhook-klarna', async (req, res) => {
   res.json({ received: true });
 });
 
+// Route pour récupérer les liens de téléchargement depuis la page de confirmation
+app.get('/download-links', async (req, res) => {
+  try {
+    const { session_id } = req.query;
+    
+    if (!session_id) {
+      return res.status(400).json({ error: 'session_id requis' });
+    }
+
+    // Essayer d'abord avec Stripe UAE
+    let session, lineItems, stripe;
+    try {
+      session = await stripeUAE.checkout.sessions.retrieve(session_id);
+      lineItems = await stripeUAE.checkout.sessions.listLineItems(session_id);
+      stripe = stripeUAE;
+    } catch (err) {
+      // Si ça échoue, essayer avec Stripe FR
+      if (stripeFR) {
+        try {
+          session = await stripeFR.checkout.sessions.retrieve(session_id);
+          lineItems = await stripeFR.checkout.sessions.listLineItems(session_id);
+          stripe = stripeFR;
+        } catch (err2) {
+          return res.status(404).json({ error: 'Session non trouvée' });
+        }
+      } else {
+        return res.status(404).json({ error: 'Session non trouvée' });
+      }
+    }
+
+    const ebooks = [];
+    const productNames = [];
+    
+    for (const item of lineItems.data) {
+      const productName = item.description || item.price?.product?.name || item.price?.product?.description || 'Produit';
+      productNames.push(productName);
+      const ebookData = findEbookLink(productName);
+      
+      if (ebookData) {
+        ebooks.push(ebookData);
+      }
+    }
+
+    res.json({
+      success: true,
+      ebooks: ebooks,
+      products: productNames,
+      found: ebooks.length > 0
+    });
+  } catch (error) {
+    console.error('Erreur récupération liens:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Achzod Klarna Checkout API' });

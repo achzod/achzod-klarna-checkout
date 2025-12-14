@@ -23,11 +23,18 @@ const transporter = nodemailer.createTransport({
 // Liens de téléchargement des ebooks
 const EBOOK_LINKS = {
   'anabolic code': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
+  'anabolic': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
   'liberer son potentiel': 'https://gofile.io/d/gWybQ6',
   'liberer son potentiel genetique': 'https://gofile.io/d/gWybQ6',
+  'liberer': 'https://gofile.io/d/gWybQ6',
+  'potentiel genetique': 'https://gofile.io/d/gWybQ6',
+  'ebook': 'https://gofile.io/d/gWybQ6', // Fallback pour "EBOOK"
   '4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
   '4 semaines shred': 'https://gofile.io/d/5SylgY',
+  '4 semaines': 'https://gofile.io/d/5SylgY',
+  'shred': 'https://gofile.io/d/5SylgY',
   'bioenergetique': 'https://gofile.io/d/Hn6GE1',
+  'bioenergetique et timing': 'https://gofile.io/d/Hn6GE1',
 };
 
 app.use(cors());
@@ -284,22 +291,36 @@ app.post('/checkout-klarna', async (req, res) => {
 
 // Fonction pour trouver le lien ebook
 function findEbookLink(productName) {
+  if (!productName) return null;
+  
   const cleanName = productName.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]/g, '')
     .trim();
   
+  console.log('🔍 Recherche ebook pour:', productName, '-> nettoyé:', cleanName);
+  
+  // Chercher une correspondance exacte ou partielle
   for (const [key, link] of Object.entries(EBOOK_LINKS)) {
-    if (cleanName.includes(key) || key.includes(cleanName)) {
+    const cleanKey = key.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim();
+    
+    // Correspondance si le nom contient la clé ou vice versa
+    if (cleanName.includes(cleanKey) || cleanKey.includes(cleanName)) {
+      console.log('✅ Ebook trouvé:', key, '->', link);
       return { name: productName, link: link };
     }
   }
+  
+  console.log('❌ Aucun ebook trouvé pour:', productName);
   return null;
 }
 
 // Générer le HTML de l'email au style ACHZOD
 function generateEmailHTML(customerName, ebooks, totalAmount) {
-  const ebookListHTML = ebooks.map(ebook => `
+  const ebookListHTML = ebooks.length > 0 ? ebooks.map(ebook => `
     <tr>
       <td style="padding: 20px 0; border-bottom: 1px solid #2a2a2a;">
         <table width="100%" cellpadding="0" cellspacing="0">
@@ -318,7 +339,15 @@ function generateEmailHTML(customerName, ebooks, totalAmount) {
         </table>
       </td>
     </tr>
-  `).join('');
+  `).join('') : `
+    <tr>
+      <td style="padding: 20px 0; text-align: center;">
+        <p style="color: #888; font-size: 14px; margin: 0;">
+          ⚠️ Les liens de téléchargement seront envoyés sous peu. Si tu ne les reçois pas, contacte-nous à achzodyt@gmail.com
+        </p>
+      </td>
+    </tr>
+  `;
 
   return `
 <!DOCTYPE html>
@@ -585,7 +614,8 @@ app.post('/webhook', async (req, res) => {
         const productNames = [];
         
         for (const item of lineItems.data) {
-          const productName = item.description || item.price?.product?.name || 'Produit';
+          const productName = item.description || item.price?.product?.name || item.price?.product?.description || 'Produit';
+          console.log('📦 Produit trouvé:', productName);
           productNames.push(productName);
           const ebookData = findEbookLink(productName);
           
@@ -594,13 +624,19 @@ app.post('/webhook', async (req, res) => {
           }
         }
         
+        console.log(`📧 ${ebooks.length} ebook(s) trouvé(s) sur ${productNames.length} produit(s)`);
+        console.log('📋 Produits:', productNames.join(', '));
+        
         // Envoyer notification à Achzod pour TOUTES les commandes
         await sendOrderNotification(customerEmail, '', productNames, totalAmount, paymentMethod);
         
-        // Si des ebooks ont été trouvés, envoyer l'email au client avec les liens
+        // Toujours envoyer l'email au client (avec ou sans liens)
+        // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
+        await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
         if (ebooks.length > 0) {
-          // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
-          await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
+          console.log('✅ Email avec liens envoyé à:', customerEmail);
+        } else {
+          console.log('⚠️ Email envoyé SANS liens. Produits:', productNames.join(', '));
         }
       } catch (error) {
         console.error('Erreur récupération line items:', error);
@@ -647,7 +683,8 @@ app.post('/webhook-klarna', async (req, res) => {
       const productNames = [];
       
       for (const item of lineItems.data) {
-        const productName = item.description || item.price?.product?.name || 'Produit';
+        const productName = item.description || item.price?.product?.name || item.price?.product?.description || 'Produit';
+        console.log('📦 Produit trouvé (FR):', productName);
         productNames.push(productName);
         const ebookData = findEbookLink(productName);
         
@@ -656,14 +693,20 @@ app.post('/webhook-klarna', async (req, res) => {
         }
       }
       
+      console.log(`📧 ${ebooks.length} ebook(s) trouvé(s) sur ${productNames.length} produit(s) (FR)`);
+      console.log('📋 Produits:', productNames.join(', '));
+      
       // Envoyer notification à Achzod
       const paymentMethod = 'Klarna (Stripe FR)';
       await sendOrderNotification(customerEmail, '', productNames, totalAmount, paymentMethod);
       
-      // Si des ebooks ont été trouvés, envoyer l'email au client
+      // Toujours envoyer l'email au client (avec ou sans liens)
+      // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
+      await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
       if (ebooks.length > 0) {
-        // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
-        await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
+        console.log('✅ Email avec liens envoyé à:', customerEmail);
+      } else {
+        console.log('⚠️ Email envoyé SANS liens. Produits:', productNames.join(', '));
       }
     } catch (error) {
       console.error('Erreur webhook FR:', error);

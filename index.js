@@ -22,19 +22,43 @@ const transporter = nodemailer.createTransport({
 
 // Liens de téléchargement des ebooks
 const EBOOK_LINKS = {
+  // Anabolic Code
   'anabolic code': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
   'anabolic': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
+  'code anabolic': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
+  
+  // Libérer son potentiel génétique
   'liberer son potentiel': 'https://gofile.io/d/gWybQ6',
   'liberer son potentiel genetique': 'https://gofile.io/d/gWybQ6',
-  'liberer': 'https://gofile.io/d/gWybQ6',
+  'liberer son potentiel génétique': 'https://gofile.io/d/gWybQ6',
   'potentiel genetique': 'https://gofile.io/d/gWybQ6',
+  'potentiel génétique': 'https://gofile.io/d/gWybQ6',
+  'liberer': 'https://gofile.io/d/gWybQ6',
+  'potentiel': 'https://gofile.io/d/gWybQ6',
   'ebook': 'https://gofile.io/d/gWybQ6', // Fallback pour "EBOOK"
+  'libérer': 'https://gofile.io/d/gWybQ6',
+  'libérer son potentiel': 'https://gofile.io/d/gWybQ6',
+  'libérer son potentiel génétique en 10 semaines': 'https://gofile.io/d/gWybQ6',
+  'liberer son potentiel genetique en 10 semaines': 'https://gofile.io/d/gWybQ6',
+  '10 semaines': 'https://gofile.io/d/gWybQ6',
+  
+  // 4 Semaines Shred
   '4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
+  '4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
   '4 semaines shred': 'https://gofile.io/d/5SylgY',
   '4 semaines': 'https://gofile.io/d/5SylgY',
   'shred': 'https://gofile.io/d/5SylgY',
+  'semaines shred': 'https://gofile.io/d/5SylgY',
+  'pour etre shred': 'https://gofile.io/d/5SylgY',
+  'pour être shred': 'https://gofile.io/d/5SylgY',
+  
+  // Bioénergétique
   'bioenergetique': 'https://gofile.io/d/Hn6GE1',
+  'bioénergétique': 'https://gofile.io/d/Hn6GE1',
   'bioenergetique et timing': 'https://gofile.io/d/Hn6GE1',
+  'bioénergétique et timing': 'https://gofile.io/d/Hn6GE1',
+  'bioenergetique timing': 'https://gofile.io/d/Hn6GE1',
+  'bioénergétique timing': 'https://gofile.io/d/Hn6GE1',
 };
 
 app.use(cors());
@@ -320,16 +344,27 @@ function findEbookLink(productName) {
   console.log('🔍 Recherche ebook pour:', productName, '-> nettoyé:', cleanName);
   
   // Chercher une correspondance exacte ou partielle
-  for (const [key, link] of Object.entries(EBOOK_LINKS)) {
+  // On teste d'abord les correspondances les plus longues pour éviter les faux positifs
+  const sortedKeys = Object.keys(EBOOK_LINKS).sort((a, b) => b.length - a.length);
+  
+  for (const key of sortedKeys) {
     const cleanKey = key.toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s]/g, '')
       .trim();
     
     // Correspondance si le nom contient la clé ou vice versa
-    if (cleanName.includes(cleanKey) || cleanKey.includes(cleanName)) {
-      console.log('✅ Ebook trouvé:', key, '->', link);
-      return { name: productName, link: link };
+    // On vérifie aussi les mots-clés individuels pour plus de flexibilité
+    const nameWords = cleanName.split(/\s+/).filter(w => w.length > 2);
+    const keyWords = cleanKey.split(/\s+/).filter(w => w.length > 2);
+    
+    const hasFullMatch = cleanName.includes(cleanKey) || cleanKey.includes(cleanName);
+    const hasWordMatch = nameWords.length > 0 && keyWords.length > 0 && 
+      nameWords.some(nw => keyWords.some(kw => nw.includes(kw) || kw.includes(nw)));
+    
+    if (hasFullMatch || (hasWordMatch && nameWords.length >= 2)) {
+      console.log('✅ Ebook trouvé:', key, '->', EBOOK_LINKS[key]);
+      return { name: productName, link: EBOOK_LINKS[key] };
     }
   }
   
@@ -702,8 +737,16 @@ app.post('/webhook-klarna', async (req, res) => {
       const productNames = [];
       
       for (const item of lineItems.data) {
-        const productName = item.description || item.price?.product?.name || item.price?.product?.description || 'Produit';
+        // Essayer plusieurs champs pour trouver le nom du produit
+        const productName = item.description || 
+                            item.price?.product?.name || 
+                            item.price?.product?.description ||
+                            item.price?.nickname ||
+                            'Produit';
         console.log('📦 Produit trouvé (FR):', productName);
+        console.log('   - description:', item.description);
+        console.log('   - price.product.name:', item.price?.product?.name);
+        console.log('   - price.product.description:', item.price?.product?.description);
         productNames.push(productName);
         const ebookData = findEbookLink(productName);
         

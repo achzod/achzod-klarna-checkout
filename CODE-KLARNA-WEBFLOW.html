@@ -1,0 +1,92 @@
+<!-- Bouton Klarna fixe en bas - SEULEMENT sur checkout -->
+<div id="klarna-fixed-btn" style="position:fixed;bottom:0;left:0;right:0;z-index:99998;padding:12px 15px;background:linear-gradient(135deg,#FFB3C7,#FFA0B8);box-shadow:0 -2px 10px rgba(0,0,0,0.2);">
+  <button type="button" onclick="klarnaGo()" style="width:100%;max-width:500px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;background:#0A0B09;color:white;font-weight:bold;font-size:16px;border:none;border-radius:8px;cursor:pointer;">
+    <img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px;">
+    Payer en 3x sans frais
+  </button>
+</div>
+
+<style>
+  /* Espace en bas pour ne pas cacher le contenu */
+  body { padding-bottom: 80px !important; }
+</style>
+
+<script>
+function klarnaGo() {
+  var btn = document.querySelector('#klarna-fixed-btn button');
+  var originalHTML = btn.innerHTML;
+  btn.innerHTML = '<span>Chargement...</span>';
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+
+  var items = [];
+  var els = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+  for (var i = 0; i < els.length; i++) {
+    var nameEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
+    var priceEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemprice');
+    
+    var name = nameEl ? nameEl.innerText.trim() : els[i].innerText.substring(0, 50);
+    var priceText = priceEl ? priceEl.innerText : els[i].innerText;
+    var priceMatch = priceText.match(/([\d\s]+)[,.](\d{2})/);
+    
+    if (priceMatch) {
+      var price = parseFloat(priceMatch[1].replace(/\s/g, '') + '.' + priceMatch[2]);
+      items.push({ name: name.substring(0, 80), price: price, quantity: 1 });
+    }
+  }
+
+  if (items.length === 0) {
+    alert('Votre panier est vide !');
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    return;
+  }
+
+  var totalAmount = 0;
+  var totalEl = document.querySelector('.w-commerce-commercecheckoutsummarytotal');
+  if (totalEl) {
+    var totalText = totalEl.innerText.replace(/[^\d,.\s]/g, '').trim().replace(/\s/g, '').replace(',', '.');
+    totalAmount = parseFloat(totalText);
+  }
+
+  var email = document.querySelector('input[type="email"]');
+
+  var payload = {
+    items: items,
+    customerEmail: email ? email.value : '',
+    successUrl: 'https://achzodcoaching.com/order-confirmation',
+    cancelUrl: 'https://achzodcoaching.com/checkout'
+  };
+
+  var itemsTotal = items.reduce(function(sum, item) { return sum + item.price; }, 0);
+  if (totalAmount > 0 && Math.abs(totalAmount - itemsTotal) > 1) {
+    payload.totalAmount = totalAmount;
+  }
+
+  // IMPORTANT: Appelle /checkout-klarna (Stripe FR) au lieu de /checkout
+  fetch('https://achzod-klarna-checkout.onrender.com/checkout-klarna', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      alert('Erreur: ' + (d.error || 'Erreur de connexion'));
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+  })
+  .catch(function(e) {
+    alert('Erreur de connexion. Veuillez réessayer.');
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  });
+}
+</script>
+

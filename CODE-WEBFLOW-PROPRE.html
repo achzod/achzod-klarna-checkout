@@ -1,0 +1,121 @@
+<!-- Crisp Chat -->
+<script type="text/javascript">
+  window.$crisp=[];
+  window.CRISP_WEBSITE_ID="5978a10d-caf5-4195-bf31-ea0223759bf7";
+  (function(){
+    d=document;s=d.createElement("script");
+    s.src="https://client.crisp.chat/l.js";
+    s.async=1;
+    d.getElementsByTagName("head")[0].appendChild(s);
+  })();
+</script>
+
+<!-- Fix panier Webflow - retry automatique si échec -->
+<script>
+(function() {
+  var originalFetch = window.fetch;
+  var retryCount = {};
+  
+  window.fetch = function(url, options) {
+    var urlStr = url && url.toString ? url.toString() : url;
+    
+    if (urlStr && urlStr.includes('.wf_graphql/apollo')) {
+      var key = urlStr + JSON.stringify(options || {});
+      retryCount[key] = retryCount[key] || 0;
+      
+      return originalFetch.apply(this, arguments)
+        .then(function(response) {
+          if (!response.ok && retryCount[key] < 2) {
+            retryCount[key]++;
+            console.log('Panier: retry ' + retryCount[key]);
+            return new Promise(function(resolve) {
+              setTimeout(function() {
+                resolve(originalFetch(url, options));
+              }, 500);
+            });
+          }
+          retryCount[key] = 0;
+          return response;
+        })
+        .catch(function(error) {
+          if (retryCount[key] < 2) {
+            retryCount[key]++;
+            console.log('Panier: retry après erreur ' + retryCount[key]);
+            return new Promise(function(resolve, reject) {
+              setTimeout(function() {
+                originalFetch(url, options).then(resolve).catch(reject);
+              }, 500);
+            });
+          }
+          throw error;
+        });
+    }
+    return originalFetch.apply(this, arguments);
+  };
+  
+  // Force refresh du panier au chargement
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      var cartBtn = document.querySelector('[data-node-type="commerce-cart-wrapper"]');
+      if (cartBtn) {
+        var event = new Event('mouseenter');
+        cartBtn.dispatchEvent(event);
+      }
+    }, 1000);
+  });
+})();
+</script>
+
+<!-- DESKTOP - Barre en bas avec 3 boutons -->
+<div id="free-audit-desktop" style="position:fixed;bottom:0;left:0;right:0;z-index:99998;background:linear-gradient(90deg,#1a1a1a 0%,#252525 100%);padding:12px 20px;display:flex;align-items:center;justify-content:center;gap:15px;border-top:1px solid #333;font-size:12px;">
+  <a href="https://form.typeform.com/to/rzHLOoUx" target="_blank" style="color:#FFB3C7;text-decoration:none;padding:6px 12px;background:rgba(255,179,199,0.1);border-radius:20px;border:1px solid rgba(255,179,199,0.3);">
+    📋 Audit Complet <s style="opacity:0.5;font-size:10px;">79€</s> <strong>GRATUIT</strong>
+  </a>
+  <a href="https://form.typeform.com/to/H45jf8VZ" target="_blank" style="color:#FFB3C7;text-decoration:none;padding:6px 12px;background:rgba(255,179,199,0.1);border-radius:20px;border:1px solid rgba(255,179,199,0.3);">
+    💪 Audit Anabolique <strong>GRATUIT</strong>
+  </a>
+  <a href="https://achzod-chat-orientation.onrender.com/" target="_blank" style="color:#0A0B09;text-decoration:none;padding:6px 12px;background:linear-gradient(135deg,#FFB3C7,#FF8DA8);border-radius:20px;font-weight:bold;">
+    🎯 Trouver ma formule
+  </a>
+  <button onclick="this.parentElement.style.display='none';document.body.style.paddingBottom='0';" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px;">✕</button>
+</div>
+
+<!-- MOBILE - Bannière audits -->
+<div id="free-audit-mobile" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99997;background:#0A0B09;padding:10px 5px;text-align:center;">
+  <a href="https://form.typeform.com/to/rzHLOoUx" target="_blank" style="display:inline-block;color:#FFB3C7;text-decoration:none;padding:6px 10px;background:#1a1a1a;border-radius:15px;border:1px solid #FFB3C7;font-size:11px;margin:2px;">
+    📋 Audit GRATUIT
+  </a>
+  <a href="https://form.typeform.com/to/H45jf8VZ" target="_blank" style="display:inline-block;color:#FFB3C7;text-decoration:none;padding:6px 10px;background:#1a1a1a;border-radius:15px;border:1px solid #FFB3C7;font-size:11px;margin:2px;">
+    💪 Anabolique
+  </a>
+  <a href="https://achzod-chat-orientation.onrender.com/" target="_blank" style="display:inline-block;color:#0A0B09;text-decoration:none;padding:6px 10px;background:#FFB3C7;border-radius:15px;font-weight:bold;font-size:11px;margin:2px;">
+    🎯 Ma formule
+  </a>
+</div>
+
+<style>
+  body { 
+    padding-bottom: 55px !important; 
+  }
+  
+  @media (max-width: 768px) {
+    #free-audit-desktop { display: none !important; }
+    #free-audit-mobile { display: block !important; }
+    body { 
+      margin-top: 55px !important;
+      padding-bottom: 0 !important; 
+    }
+  }
+</style>
+
+<script>
+if (window.location.pathname.includes('checkout')) {
+  document.addEventListener('DOMContentLoaded', function() {
+    var d = document.getElementById('free-audit-desktop');
+    var m = document.getElementById('free-audit-mobile');
+    if (d) d.style.display = 'none';
+    if (m) m.style.display = 'none';
+  });
+}
+</script>
+

@@ -8,15 +8,8 @@ const app = express();
 // Stripe UAE (paiements normaux : cartes, Apple Pay, etc.)
 const stripeUAE = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Stripe FR (uniquement pour Klarna)  
-const getFRKey = () => {
-  const env = process.env.STRIPE_SECRET_KEY_FR;
-  if (env) return env;
-  // Fallback construit depuis valeurs numériques
-  const arr = [115,107,95,108,105,118,101,95,53,49,70,76,120,115,98,73,78,80,113,108,121,119,72,87,57,53,53,77,55,109,69,117,88,117,69,90,87,98,68,111,72,81,76,70,68,105,114,66,53,103,85,81,78,84,55,107,69,74,65,70,121,70,116,116,65,49,55,72,48,76,87,106,49,119,65,56,74,49,113,84,68,76,71,50,53,108,65,89,110,50,89,115,82,57,71,53,110,48,48,74,65,73,106,80,116,113,120];
-  return String.fromCharCode.apply(null, arr);
-};
-const stripeFR = new Stripe(getFRKey());
+// Stripe FR (uniquement pour Klarna)
+const stripeFR = process.env.STRIPE_SECRET_KEY_FR ? new Stripe(process.env.STRIPE_SECRET_KEY_FR) : null;
 
 // Configuration email (Gmail)
 const transporter = nodemailer.createTransport({
@@ -191,7 +184,7 @@ app.post('/checkout', async (req, res) => {
 
 // Route Klarna - Utilise Stripe FR
 app.post('/checkout-klarna', async (req, res) => {
-  try {
+  if (!stripeFR) {
     console.error('❌ STRIPE_SECRET_KEY_FR non configuré !');
     return res.status(500).json({ error: 'Configuration Stripe FR manquante. Contacte le support.' });
   }

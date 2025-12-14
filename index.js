@@ -215,33 +215,6 @@ app.post('/checkout', async (req, res) => {
       }
     }
 
-    const sessionConfig = {
-      payment_method_types: ['card', 'link'],
-      line_items: lineItems,
-      mode: 'payment',
-      success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
-      cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
-      billing_address_collection: 'required',
-      locale: 'fr',
-      // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
-      metadata: {
-        merchant_name: 'achzodcoaching',
-        business_name: 'AchzodCoaching'
-      }
-      // Note: Ne pas définir receipt_email = pas de reçu Stripe automatique
-      // Les reçus Stripe doivent être désactivés dans le dashboard Stripe
-    };
-
-    // Ajouter l'email du client (pour pré-remplir le formulaire, PAS pour le reçu Stripe)
-    // On n'envoie PAS de receipt_email car on envoie notre propre email ACHZOD via webhook
-    if (customerEmail && customerEmail.trim()) {
-      sessionConfig.customer_email = customerEmail.trim();
-      // PAS de receipt_email = pas de reçu Stripe automatique
-    }
-
-    const session = await stripeUAE.checkout.sessions.create(sessionConfig);
-    res.json({ url: session.url });
-
   } catch (error) {
     console.error('Erreur Stripe:', error);
     res.status(500).json({ error: error.message });

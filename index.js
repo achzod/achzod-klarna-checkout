@@ -42,7 +42,7 @@ const EBOOK_LINKS = {
   'liberer son potentiel genetique en 10 semaines': 'https://gofile.io/d/gWybQ6',
   '10 semaines': 'https://gofile.io/d/gWybQ6',
   
-  // 4 Semaines Shred
+  // 4 Semaines Shred - TOUTES LES VARIANTES POSSIBLES
   '4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
   '4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
   '4 semaines shred': 'https://gofile.io/d/5SylgY',
@@ -51,6 +51,15 @@ const EBOOK_LINKS = {
   'semaines shred': 'https://gofile.io/d/5SylgY',
   'pour etre shred': 'https://gofile.io/d/5SylgY',
   'pour être shred': 'https://gofile.io/d/5SylgY',
+  '4 semaines pour etre shred perte de gras et prise de muscles': 'https://gofile.io/d/5SylgY',
+  '4 semaines pour être shred perte de gras et prise de muscles': 'https://gofile.io/d/5SylgY',
+  'perte de gras': 'https://gofile.io/d/5SylgY',
+  'prise de muscles': 'https://gofile.io/d/5SylgY',
+  'perte de gras et prise de muscles': 'https://gofile.io/d/5SylgY',
+  'ebook 4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
+  'ebook 4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
+  'ebook 49 00 eur 4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
+  'ebook 49 00 eur 4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
   
   // Bioénergétique
   'bioenergetique': 'https://gofile.io/d/Hn6GE1',

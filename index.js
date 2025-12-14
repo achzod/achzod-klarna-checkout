@@ -229,11 +229,6 @@ app.post('/checkout-klarna', async (req, res) => {
       // - Klarna-only pour éviter l'écran "choisir une devise" (AED) qui apparaît avec la carte.
       // - Si Klarna n'est pas disponible pour l'acheteur, il doit utiliser le bouton "PAYER" Webflow (Stripe UAE).
       payment_method_types: ['klarna'],
-      payment_method_options: {
-        klarna: {
-          preferred_locale: 'fr-FR',
-        },
-      },
       line_items: lineItems,
       mode: 'payment',
       success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',

@@ -261,12 +261,6 @@ app.post('/checkout-klarna', async (req, res) => {
       locale: 'fr',
       // Expiration plus longue pour éviter les sessions expirées
       expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
-      // Forcer l'affichage de Klarna si disponible
-      payment_method_options: {
-        klarna: {
-          enabled: true,
-        },
-      },
       // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
       metadata: {
         merchant_name: 'achzodcoaching',

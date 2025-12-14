@@ -812,7 +812,13 @@ app.get('/download-links', async (req, res) => {
     const productNames = [];
     
     for (const item of lineItems.data) {
-      const productName = item.description || item.price?.product?.name || item.price?.product?.description || 'Produit';
+      // Essayer plusieurs champs pour trouver le nom du produit
+      const productName = item.description || 
+                          item.price?.product?.name || 
+                          item.price?.product?.description ||
+                          item.price?.nickname ||
+                          'Produit';
+      console.log('📦 Produit trouvé (download-links):', productName);
       productNames.push(productName);
       const ebookData = findEbookLink(productName);
       

@@ -200,11 +200,15 @@ app.post('/checkout', async (req, res) => {
       });
     }
 
+    // Utiliser {CHECKOUT_SESSION_ID} dans l'URL de success pour que Stripe le remplace automatiquement
+    const baseSuccessUrl = successUrl || 'https://achzodcoaching.com/order-confirmation';
+    const successUrlWithSessionId = `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`;
+    
     const sessionConfig = {
       payment_method_types: ['card', 'link'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
+      success_url: successUrlWithSessionId,
       cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
       billing_address_collection: 'required',
       locale: 'fr',
@@ -250,13 +254,9 @@ app.post('/checkout', async (req, res) => {
           quantity: item.quantity || 1,
         }));
         sessionConfig.line_items = lineItems;
+        // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
         const session = await stripeUAE.checkout.sessions.create(sessionConfig);
-        // Ajouter session_id dans l'URL de success
-        const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
-        const finalSession = await stripeUAE.checkout.sessions.update(session.id, {
-          success_url: successUrlWithSession
-        });
-        res.json({ url: finalSession.url });
+        res.json({ url: session.url });
       } else {
         throw error;
       }

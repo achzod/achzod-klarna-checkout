@@ -238,16 +238,17 @@ app.post('/checkout-klarna', async (req, res) => {
     }
 
     const sessionConfig = {
-      // IMPORTANT:
-      // - Klarna-only pour éviter l'écran "choisir une devise" (AED) qui apparaît avec la carte.
-      // - Si Klarna n'est pas disponible pour l'acheteur, il doit utiliser le bouton "PAYER" Webflow (Stripe UAE).
-      payment_method_types: ['klarna'],
+      // Klarna en priorité, mais card en fallback si Klarna n'est pas disponible
+      // (ex: géolocalisation, restrictions Klarna, etc.)
+      payment_method_types: ['klarna', 'card'],
       line_items: lineItems,
       mode: 'payment',
       success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
       cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
       billing_address_collection: 'required',
       locale: 'fr',
+      // Expiration plus longue pour éviter les sessions expirées
+      expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
     };
 
     if (customerEmail && customerEmail.trim()) {

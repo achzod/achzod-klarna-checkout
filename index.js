@@ -813,6 +813,104 @@ app.post('/webhook-klarna', async (req, res) => {
   res.json({ received: true });
 });
 
+// Route pour récupérer les données complètes de la commande depuis la page de confirmation
+app.get('/order-data', async (req, res) => {
+  try {
+    const { session_id } = req.query;
+    
+    if (!session_id) {
+      return res.status(400).json({ error: 'session_id requis' });
+    }
+
+    // Essayer d'abord avec Stripe UAE
+    let session, lineItems, stripe;
+    try {
+      session = await stripeUAE.checkout.sessions.retrieve(session_id, {
+        expand: ['customer_details', 'payment_intent']
+      });
+      lineItems = await stripeUAE.checkout.sessions.listLineItems(session_id, {
+        expand: ['data.price.product']
+      });
+      stripe = stripeUAE;
+    } catch (err) {
+      // Si ça échoue, essayer avec Stripe FR
+      if (stripeFR) {
+        try {
+          session = await stripeFR.checkout.sessions.retrieve(session_id, {
+            expand: ['customer_details', 'payment_intent']
+          });
+          lineItems = await stripeFR.checkout.sessions.listLineItems(session_id, {
+            expand: ['data.price.product']
+          });
+          stripe = stripeFR;
+        } catch (err2) {
+          console.error('❌ Session non trouvée dans UAE ni FR:', err2.message);
+          return res.status(404).json({ error: 'Session non trouvée' });
+        }
+      } else {
+        return res.status(404).json({ error: 'Session non trouvée' });
+      }
+    }
+
+    // Vérifier que la session est complétée
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Paiement non complété' });
+    }
+
+    const ebooks = [];
+    const productNames = [];
+    const items = [];
+    
+    for (const item of lineItems.data) {
+      // Essayer plusieurs champs pour trouver le nom du produit
+      const productName = item.description || 
+                          item.price?.product?.name || 
+                          item.price?.product?.description ||
+                          item.price?.nickname ||
+                          'Produit';
+      const price = (item.amount_total / 100).toFixed(2);
+      const quantity = item.quantity;
+      
+      productNames.push(productName);
+      items.push({
+        name: productName,
+        price: parseFloat(price),
+        quantity: quantity
+      });
+      
+      const ebookData = findEbookLink(productName);
+      if (ebookData) {
+        ebooks.push(ebookData);
+      }
+    }
+
+    const totalAmount = (session.amount_total / 100).toFixed(2);
+    const currency = session.currency.toUpperCase();
+    const customerEmail = session.customer_details?.email || session.customer_email;
+    const customerName = session.customer_details?.name || '';
+
+    res.json({
+      success: true,
+      order: {
+        id: session.id,
+        total: totalAmount,
+        currency: currency,
+        customerEmail: customerEmail,
+        customerName: customerName,
+        items: items,
+        paymentStatus: session.payment_status,
+        paymentMethod: session.payment_method_types?.[0] || 'unknown'
+      },
+      ebooks: ebooks,
+      products: productNames,
+      found: ebooks.length > 0
+    });
+  } catch (error) {
+    console.error('Erreur récupération données commande:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Route pour récupérer les liens de téléchargement depuis la page de confirmation
 app.get('/download-links', async (req, res) => {
   try {

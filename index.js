@@ -230,17 +230,9 @@ app.post('/checkout', async (req, res) => {
 
     // Si erreur "No such price", recréer avec price_data uniquement
     try {
+      // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
       const session = await stripeUAE.checkout.sessions.create(sessionConfig);
-      // Ajouter session_id dans l'URL de success pour récupérer les données sur la page de confirmation
-      const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
-      sessionConfig.success_url = successUrlWithSession;
-      
-      // Recréer la session avec la bonne URL
-      const finalSession = await stripeUAE.checkout.sessions.update(session.id, {
-        success_url: successUrlWithSession
-      });
-      
-      res.json({ url: finalSession.url });
+      res.json({ url: session.url });
     } catch (error) {
       if (error.message && error.message.includes('No such price')) {
         console.log('⚠️  Price ID invalide, utilisation de price_data pour tous les items');

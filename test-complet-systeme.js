@@ -81,14 +81,17 @@ async function testCheckoutUAE(product) {
     log(`✅ URL checkout créée: ${data.url}`, 'green');
     
     // Extraire session_id de l'URL (format: /pay/cs_live_...)
+    // Le session_id est avant le # (fragment)
     let sessionId = null;
-    const sessionIdMatch = data.url.match(/\/pay\/(cs_[^/?]+)/) || data.url.match(/\/checkout\/sessions\/([^/?]+)/);
+    const urlWithoutFragment = data.url.split('#')[0];
+    const sessionIdMatch = urlWithoutFragment.match(/\/pay\/(cs_[^/?]+)/) || urlWithoutFragment.match(/\/checkout\/sessions\/([^/?]+)/);
     if (sessionIdMatch) {
       sessionId = sessionIdMatch[1];
+      // Nettoyer le session_id (juste la partie avant le #)
+      sessionId = sessionId.split('#')[0].split('?')[0];
     } else {
       log(`⚠️  Impossible d'extraire session_id de l'URL`, 'yellow');
       log(`   URL: ${data.url}`, 'yellow');
-      // Essayer de créer une session de test directement
       return { success: true, sessionId: null, url: data.url };
     }
     log(`📋 Session ID: ${sessionId}`, 'cyan');
@@ -232,10 +235,14 @@ async function testCheckoutKlarna(product) {
     log(`✅ URL checkout créée: ${data.url}`, 'green');
     
     // Extraire session_id (format: /pay/cs_live_...)
+    // Le session_id est avant le # (fragment)
     let sessionId = null;
-    const sessionIdMatch = data.url.match(/\/pay\/(cs_[^/?]+)/) || data.url.match(/\/checkout\/sessions\/([^/?]+)/);
+    const urlWithoutFragment = data.url.split('#')[0];
+    const sessionIdMatch = urlWithoutFragment.match(/\/pay\/(cs_[^/?]+)/) || urlWithoutFragment.match(/\/checkout\/sessions\/([^/?]+)/);
     if (sessionIdMatch) {
       sessionId = sessionIdMatch[1];
+      // Nettoyer le session_id (juste la partie avant le #)
+      sessionId = sessionId.split('#')[0].split('?')[0];
     } else {
       log(`⚠️  Impossible d'extraire session_id`, 'yellow');
       log(`   URL: ${data.url}`, 'yellow');

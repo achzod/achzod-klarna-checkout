@@ -148,9 +148,13 @@ app.post('/checkout', async (req, res) => {
       lineItems = items.map(item => {
         const priceId = findPriceId(item.name, item.price);
 
+        // Pour les ebooks et produits sans Price ID valide, utiliser price_data
+        // Cela évite les erreurs "No such price" si les Price IDs n'existent pas
         if (priceId) {
+          // Essayer d'utiliser le Price ID, mais en cas d'erreur, fallback sur price_data
           return { price: priceId, quantity: item.quantity || 1 };
         } else {
+          // Pas de Price ID trouvé, utiliser price_data
           return {
             price_data: {
               currency: 'eur',
@@ -161,6 +165,54 @@ app.post('/checkout', async (req, res) => {
           };
         }
       });
+    }
+
+    const sessionConfig = {
+      payment_method_types: ['card', 'link'],
+      line_items: lineItems,
+      mode: 'payment',
+      success_url: successUrl || 'https://achzodcoaching.com/order-confirmation',
+      cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
+      billing_address_collection: 'required',
+      locale: 'fr',
+      // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
+      metadata: {
+        merchant_name: 'achzodcoaching',
+        business_name: 'AchzodCoaching'
+      }
+      // Note: Ne pas définir receipt_email = pas de reçu Stripe automatique
+      // Les reçus Stripe doivent être désactivés dans le dashboard Stripe
+    };
+
+    // Ajouter l'email du client (pour pré-remplir le formulaire, PAS pour le reçu Stripe)
+    // On n'envoie PAS de receipt_email car on envoie notre propre email ACHZOD via webhook
+    if (customerEmail && customerEmail.trim()) {
+      sessionConfig.customer_email = customerEmail.trim();
+      // PAS de receipt_email = pas de reçu Stripe automatique
+    }
+
+    // Si erreur "No such price", recréer avec price_data uniquement
+    try {
+      const session = await stripeUAE.checkout.sessions.create(sessionConfig);
+      res.json({ url: session.url });
+    } catch (error) {
+      if (error.message && error.message.includes('No such price')) {
+        console.log('⚠️  Price ID invalide, utilisation de price_data pour tous les items');
+        // Recréer lineItems avec price_data uniquement
+        lineItems = items.map(item => ({
+          price_data: {
+            currency: 'eur',
+            product_data: { name: item.name },
+            unit_amount: Math.round(item.price * 100),
+          },
+          quantity: item.quantity || 1,
+        }));
+        sessionConfig.line_items = lineItems;
+        const session = await stripeUAE.checkout.sessions.create(sessionConfig);
+        res.json({ url: session.url });
+      } else {
+        throw error;
+      }
     }
 
     const sessionConfig = {

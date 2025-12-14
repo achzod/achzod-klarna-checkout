@@ -1,0 +1,219 @@
+<!--
+===========================================
+FIX PAGE ORDER CONFIRMATION WEBFLOW
+===========================================
+
+Ce script récupère les données de la commande depuis notre API
+et les affiche sur la page order-confirmation de Webflow.
+
+INSTRUCTIONS:
+1. Va dans Webflow > Project Settings > Custom Code
+2. Colle ce script dans la section "Footer Code" de la page order-confirmation
+3. Publie ton site
+
+-->
+
+<script>
+(function() {
+  // Récupérer session_id depuis l'URL (pour paiements Klarna/Stripe)
+  const urlParams = new URLSearchParams(window.location.search);
+  const sessionId = urlParams.get('session_id');
+  const orderId = urlParams.get('orderId'); // Pour paiements Webflow normaux
+  
+  // Si c'est un paiement Webflow normal (avec orderId), ne rien faire
+  if (orderId) {
+    console.log('✅ Commande Webflow normale, pas besoin de récupérer depuis API');
+    return;
+  }
+  
+  // Si pas de session_id, c'est peut-être une page vide ou erreur
+  if (!sessionId) {
+    console.log('⚠️ Pas de session_id ni orderId dans l\'URL - page peut être vide');
+    return;
+  }
+
+  console.log('🔍 Récupération données commande Klarna/Stripe pour session:', sessionId);
+
+  // Récupérer les données de la commande depuis notre API
+  fetch(`https://achzod-klarna-checkout.onrender.com/order-data?session_id=${sessionId}`)
+    .then(response => response.json())
+    .then(data => {
+      if (!data.success) {
+        console.error('❌ Erreur:', data.error);
+        return;
+      }
+
+      console.log('✅ Données commande reçues:', data);
+
+      const order = data.order;
+      const totalFormatted = `${order.total} ${order.currency === 'EUR' ? '€' : order.currency}`;
+      
+      // Fonction pour remplacer tous les montants $0.00 ou 0,00
+      function replaceAmounts() {
+        // Remplacer dans tous les éléments de texte
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+          null,
+          false
+        );
+        
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+          textNodes.push(node);
+        }
+        
+        textNodes.forEach(textNode => {
+          const text = textNode.textContent;
+          // Chercher $0.00, € 0,00, 0,00 €, 0.00, etc.
+          if (text && (
+            text.includes('$0.00') || 
+            text.includes('€ 0,00') || 
+            text.includes('0,00 €') ||
+            text.includes('0.00 €') ||
+            (text.match(/0[,.]00/) && (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ')))
+          )) {
+            // Remplacer seulement si c'est dans un contexte de total
+            if (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || text.includes('Total')) {
+              textNode.textContent = text.replace(/\$?0[,.]00\s*€?/g, totalFormatted);
+            }
+          }
+        });
+      }
+      
+      // Mettre à jour les montants affichés (chercher tous les éléments possibles)
+      const totalSelectors = [
+        '.w-commerce-commercecheckoutsummarytotal',
+        '[data-wf-bindings*="total"]',
+        '.order-total',
+        '.total-amount',
+        '.checkout-total',
+        'div[class*="total"]',
+        'span[class*="total"]'
+      ];
+      
+      totalSelectors.forEach(selector => {
+        try {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            const text = el.textContent || el.innerText || '';
+            if (text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00') || text.includes('0.00 €') || text.includes('0.00')) {
+              // Vérifier si c'est vraiment un total (contient "TOTAL" ou "Total" ou "RÉGLÉ")
+              const parentText = el.parentElement ? el.parentElement.textContent : '';
+              if (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || parentText.includes('TOTAL') || parentText.includes('Total')) {
+                el.textContent = totalFormatted;
+                el.style.color = '#000';
+                el.style.fontWeight = 'bold';
+              }
+            }
+          });
+        } catch (e) {
+          // Ignorer les sélecteurs invalides
+        }
+      });
+      
+      // Chercher aussi dans les récapitulatifs de commande
+      const summaryBlocks = document.querySelectorAll('.w-commerce-commercecheckoutsummaryblock, .order-summary, .checkout-summary, [class*="summary"]');
+      summaryBlocks.forEach(block => {
+        const blockText = block.textContent || '';
+        if (blockText.includes('TOTAL') || blockText.includes('Total') || blockText.includes('RÉGLÉ')) {
+          // Chercher tous les éléments avec des montants
+          const amountElements = block.querySelectorAll('div, span, p, td');
+          amountElements.forEach(el => {
+            const text = el.textContent || '';
+            if ((text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00')) && 
+                (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || el.parentElement?.textContent?.includes('TOTAL'))) {
+              el.textContent = totalFormatted;
+              el.style.fontWeight = 'bold';
+            }
+          });
+        }
+      });
+      
+      // Remplacer aussi dans tout le DOM
+      replaceAmounts();
+
+      // Mettre à jour le sous-total
+      const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2);
+      const subtotalFormatted = `${subtotal} ${order.currency === 'EUR' ? '€' : order.currency}`;
+      const subtotalElements = document.querySelectorAll('[data-wf-bindings*="subtotal"], .cart-subtotal-text, [class*="subtotal"]');
+      subtotalElements.forEach(el => {
+        const text = el.textContent || '';
+        if (text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00')) {
+          el.textContent = subtotalFormatted;
+        }
+      });
+
+      // Mettre à jour les prix des items
+      const itemElements = document.querySelectorAll('.w-commerce-commercecheckoutorderitem, [class*="orderitem"]');
+      itemElements.forEach((el, index) => {
+        if (index < order.items.length) {
+          const item = order.items[index];
+          const priceEl = el.querySelector('.w-commerce-commercecheckoutorderitemprice, .checkout-price, [class*="price"]');
+          if (priceEl) {
+            const priceText = priceEl.textContent || '';
+            if (priceText.includes('$0.00') || priceText.includes('0,00') || priceText.includes('€ 0,00')) {
+              priceEl.textContent = `${(item.price * item.quantity).toFixed(2)} ${order.currency === 'EUR' ? '€' : order.currency}`;
+            }
+          }
+        }
+      });
+
+      // Afficher les liens de téléchargement si des ebooks sont trouvés
+      if (data.ebooks && data.ebooks.length > 0) {
+        const downloadsSection = document.querySelector('.w-commerce-commercedownloadswrapper, .downloads, [class*="download"]');
+        if (downloadsSection) {
+          const downloadsList = downloadsSection.querySelector('.w-commerce-commercedownloadslist, .downloads-list, [class*="download"]');
+          if (downloadsList) {
+            // Vider la liste existante
+            downloadsList.innerHTML = '';
+            
+            // Ajouter chaque ebook
+            data.ebooks.forEach(ebook => {
+              const item = document.createElement('div');
+              item.className = 'w-commerce-commercedownloadsitem download-item';
+              item.innerHTML = `
+                <div class="download-text">${ebook.name}</div>
+                <a href="${ebook.link}" target="_blank" class="download-button w-button">Télécharger</a>
+              `;
+              downloadsList.appendChild(item);
+            });
+          }
+        } else {
+          // Créer la section si elle n'existe pas
+          const orderContainer = document.querySelector('.w-commerce-commerceorderconfirmationcontainer, .order-confirmation-container, [class*="confirmation"]');
+          if (orderContainer) {
+            const downloadsSection = document.createElement('div');
+            downloadsSection.className = 'w-commerce-commercedownloadswrapper downloads';
+            downloadsSection.style.marginTop = '20px';
+            downloadsSection.style.padding = '20px';
+            downloadsSection.style.backgroundColor = '#f5f5f5';
+            downloadsSection.style.borderRadius = '8px';
+            downloadsSection.innerHTML = `
+              <div class="w-commerce-commercecheckoutsummaryblockheader block-header confirmation">
+                <h4 class="checkout-section-headine" style="font-size: 18px; font-weight: bold; margin-bottom: 15px;">Téléchargez votre e-book</h4>
+              </div>
+              <fieldset class="w-commerce-commercecheckoutblockcontent">
+                <div class="w-commerce-commercedownloadslist downloads-list">
+                  ${data.ebooks.map(ebook => `
+                    <div class="w-commerce-commercedownloadsitem download-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 10px; background: white; border-radius: 4px;">
+                      <div class="download-text" style="font-weight: 500;">${ebook.name}</div>
+                      <a href="${ebook.link}" target="_blank" class="download-button w-button" style="padding: 8px 16px; background: #0A0B09; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Télécharger</a>
+                    </div>
+                  `).join('')}
+                </div>
+              </fieldset>
+            `;
+            orderContainer.insertBefore(downloadsSection, orderContainer.firstChild);
+          }
+        }
+      }
+
+      console.log('✅ Page mise à jour avec les données de la commande');
+    })
+    .catch(error => {
+      console.error('❌ Erreur récupération données:', error);
+    });
+})();
+</script>

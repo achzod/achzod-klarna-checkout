@@ -1,0 +1,178 @@
+<!-- ============================================
+     CODE WEBFLOW CORRIGÉ - MOBILE FIX
+     ============================================
+     
+     OÙ LE METTRE :
+     Webflow > Site Settings > Custom Code > Footer Code
+     ============================================ -->
+
+<!-- BARRE PROMOTIONNELLE EN HAUT (z-index bas pour ne pas cacher le header) -->
+<div id="ac-promo-bar" style="position:fixed;top:0;left:0;right:0;z-index:100;background:linear-gradient(90deg,#FFB3C7 0%,#0070BA 100%);padding:8px 15px;display:flex;justify-content:center;align-items:center;gap:30px;flex-wrap:wrap;font-size:13px;font-weight:600;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:18px;filter:brightness(0) invert(1);">
+    <span>Paiement en 3x sans frais</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" style="height:18px;">
+    <span>Paiement en 4x sans frais</span>
+  </div>
+</div>
+
+<style>
+  /* Espace en haut pour la barre promo - mais le header Webflow passe au-dessus */
+  body { 
+    padding-top: 45px !important; 
+    padding-bottom: 80px !important;
+  }
+  
+  /* S'assurer que le header Webflow passe au-dessus de la barre promo */
+  header,
+  .w-nav,
+  [data-w-id],
+  .w-commerce-commercecartwrapper {
+    position: relative !important;
+    z-index: 1000 !important;
+  }
+  
+  /* Mobile : barre promo plus compacte */
+  @media (max-width: 768px) {
+    #ac-promo-bar {
+      gap: 12px !important;
+      font-size: 10px !important;
+      padding: 5px 8px !important;
+      flex-wrap: nowrap !important;
+    }
+    #ac-promo-bar img {
+      height: 14px !important;
+    }
+    #ac-promo-bar span {
+      white-space: nowrap;
+    }
+    /* Réduire le padding-top sur mobile si nécessaire */
+    body {
+      padding-top: 38px !important;
+    }
+  }
+  
+  /* Très petits écrans : barre encore plus compacte */
+  @media (max-width: 480px) {
+    #ac-promo-bar {
+      font-size: 9px !important;
+      padding: 4px 6px !important;
+      gap: 8px !important;
+    }
+    #ac-promo-bar img {
+      height: 12px !important;
+    }
+    body {
+      padding-top: 35px !important;
+    }
+  }
+</style>
+
+<!-- BOUTON KLARNA FIXE EN BAS (seulement sur checkout) -->
+<script>
+(function() {
+  if (window.location.pathname.includes('checkout')) {
+    var klarnaBtn = document.createElement('div');
+    klarnaBtn.id = 'klarna-fixed-btn';
+    klarnaBtn.innerHTML = '<button type="button" onclick="klarnaGo()" style="width:100%;max-width:500px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;background:#0A0B09;color:white;font-weight:bold;font-size:16px;border:none;border-radius:8px;cursor:pointer;"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px;">Payer en 3x sans frais</button>';
+    klarnaBtn.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99998;padding:12px 15px;background:linear-gradient(135deg,#FFB3C7,#FFA0B8);box-shadow:0 -2px 10px rgba(0,0,0,0.2);';
+    document.body.appendChild(klarnaBtn);
+  }
+})();
+
+function klarnaGo() {
+  var btn = document.querySelector('#klarna-fixed-btn button');
+  if (!btn) return;
+  
+  var originalHTML = btn.innerHTML;
+  btn.innerHTML = '<span>Chargement...</span>';
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+
+  var items = [];
+  var els = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+  
+  for (var i = 0; i < els.length; i++) {
+    var nameEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
+    var priceEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemprice');
+    
+    var name = nameEl ? nameEl.innerText.trim() : els[i].innerText.substring(0, 50);
+    var priceText = priceEl ? priceEl.innerText : els[i].innerText;
+    
+    var priceMatch = priceText.match(/€\s*([\d\s,]+)/) || priceText.match(/([\d\s]+)[,.](\d{2})\s*€/) || priceText.match(/([\d\s]+)[,.](\d{2})/);
+    
+    if (priceMatch) {
+      var priceStr = priceMatch[1] ? priceMatch[1].replace(/\s/g, '').replace(',', '.') : priceMatch[0];
+      if (priceMatch[2]) {
+        priceStr = priceMatch[1].replace(/\s/g, '') + '.' + priceMatch[2];
+      }
+      var price = parseFloat(priceStr);
+      if (price > 0) {
+        items.push({ name: name.substring(0, 80), price: price, quantity: 1 });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    alert('Votre panier est vide !');
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    return;
+  }
+
+  var totalAmount = 0;
+  var totalEl = document.querySelector('.w-commerce-commercecheckoutsummarytotal');
+  if (totalEl) {
+    var totalText = totalEl.innerText;
+    var eurMatch = totalText.match(/€\s*([\d\s,]+)/) || totalText.match(/([\d\s]+)[,.](\d{2})\s*€/);
+    if (eurMatch) {
+      var totalStr = eurMatch[1] ? eurMatch[1].replace(/\s/g, '').replace(',', '.') : '';
+      if (eurMatch[2]) {
+        totalStr = eurMatch[1].replace(/\s/g, '') + '.' + eurMatch[2];
+      }
+      totalAmount = parseFloat(totalStr);
+    }
+  }
+
+  var email = document.querySelector('input[type="email"]');
+
+  var payload = {
+    items: items,
+    customerEmail: email ? email.value : '',
+    successUrl: 'https://achzodcoaching.com/order-confirmation',
+    cancelUrl: 'https://achzodcoaching.com/checkout'
+  };
+
+  var itemsTotal = items.reduce(function(sum, item) { return sum + item.price; }, 0);
+  if (totalAmount > 0 && Math.abs(totalAmount - itemsTotal) > 1) {
+    payload.totalAmount = totalAmount;
+  }
+
+  fetch('https://achzod-klarna-checkout.onrender.com/checkout-klarna', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d && d.url) {
+      window.location.href = d.url;
+    } else {
+      alert('Erreur: ' + (d && d.error ? d.error : 'Réponse invalide'));
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+  })
+  .catch(function(e) {
+    alert('Erreur de connexion. Veuillez réessayer.');
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  });
+}
+</script>
+

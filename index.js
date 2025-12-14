@@ -227,7 +227,16 @@ app.post('/checkout', async (req, res) => {
     // Si erreur "No such price", recréer avec price_data uniquement
     try {
       const session = await stripeUAE.checkout.sessions.create(sessionConfig);
-      res.json({ url: session.url });
+      // Ajouter session_id dans l'URL de success pour récupérer les données sur la page de confirmation
+      const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
+      sessionConfig.success_url = successUrlWithSession;
+      
+      // Recréer la session avec la bonne URL
+      const finalSession = await stripeUAE.checkout.sessions.update(session.id, {
+        success_url: successUrlWithSession
+      });
+      
+      res.json({ url: finalSession.url });
     } catch (error) {
       if (error.message && error.message.includes('No such price')) {
         console.log('⚠️  Price ID invalide, utilisation de price_data pour tous les items');
@@ -242,7 +251,12 @@ app.post('/checkout', async (req, res) => {
         }));
         sessionConfig.line_items = lineItems;
         const session = await stripeUAE.checkout.sessions.create(sessionConfig);
-        res.json({ url: session.url });
+        // Ajouter session_id dans l'URL de success
+        const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
+        const finalSession = await stripeUAE.checkout.sessions.update(session.id, {
+          success_url: successUrlWithSession
+        });
+        res.json({ url: finalSession.url });
       } else {
         throw error;
       }
@@ -332,8 +346,18 @@ app.post('/checkout-klarna', async (req, res) => {
       sessionConfig.customer_email = customerEmail.trim();
     }
 
+    // Créer la session d'abord
     const session = await stripeFR.checkout.sessions.create(sessionConfig);
-    res.json({ url: session.url });
+    
+    // Ajouter session_id dans l'URL de success pour récupérer les données sur la page de confirmation
+    const successUrlWithSession = `${successUrl || 'https://achzodcoaching.com/order-confirmation'}?session_id=${session.id}`;
+    
+    // Mettre à jour la session avec la bonne URL
+    const finalSession = await stripeFR.checkout.sessions.update(session.id, {
+      success_url: successUrlWithSession
+    });
+    
+    res.json({ url: finalSession.url });
 
   } catch (error) {
     console.error('Erreur Stripe FR (Klarna):', error);

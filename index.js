@@ -213,23 +213,15 @@ app.post('/checkout-klarna', async (req, res) => {
         quantity: 1,
       }];
     } else {
-      // Utiliser les prix individuels avec les anciens Price IDs Stripe FR
-      lineItems = items.map(item => {
-        const priceId = findPriceId(item.name, item.price);
-
-        if (priceId) {
-          return { price: priceId, quantity: item.quantity || 1 };
-        } else {
-          return {
-            price_data: {
-              currency: 'eur',
-              product_data: { name: item.name },
-              unit_amount: Math.round(item.price * 100),
-            },
-            quantity: item.quantity || 1,
-          };
-        }
-      });
+      // Pour Klarna (Stripe FR), toujours utiliser price_data (pas de Price IDs)
+      lineItems = items.map(item => ({
+        price_data: {
+          currency: 'eur',
+          product_data: { name: item.name },
+          unit_amount: Math.round(item.price * 100),
+        },
+        quantity: item.quantity || 1,
+      }));
     }
 
     const sessionConfig = {

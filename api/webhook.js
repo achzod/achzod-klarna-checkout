@@ -213,6 +213,49 @@ async function sendEbookEmail(customerEmail, customerName, ebooks, totalAmount) 
   await transporter.sendMail(mailOptions);
 }
 
+async function sendAdminNotification(session, fullSession) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+  if (!adminEmail) return;
+
+  const customerEmail = fullSession.customer_details?.email || session.customer_email || 'inconnu';
+  const customerName = fullSession.customer_details?.name || '';
+  const totalAmount = (fullSession.amount_total / 100).toFixed(2);
+  const paymentMethod = fullSession.payment_method_types?.join(', ') || 'N/A';
+  const lineItems = (fullSession.line_items?.data || []).map(item => {
+    const name = item.description || item.price?.product?.name || 'Produit';
+    const qty = item.quantity || 1;
+    const amount = item.amount_total ? (item.amount_total / 100).toFixed(2) + '€' : '';
+    return `- ${name} x${qty} ${amount}`;
+  }).join('\n') || 'Aucun item';
+
+  const mailOptions = {
+    from: {
+      name: 'AchzodCoaching',
+      address: process.env.EMAIL_USER,
+    },
+    to: adminEmail,
+    subject: `✅ Nouvelle commande Klarna/Stripe - ${totalAmount}€`,
+    text:
+`Nouvelle commande confirmée.
+
+Client : ${customerName} <${customerEmail}>
+Total : ${totalAmount}€
+Paiement : ${paymentMethod}
+Session : ${session.id}
+
+Items :
+${lineItems}
+`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Admin notif envoyée à ${adminEmail}`);
+  } catch (e) {
+    console.error('Erreur envoi notif admin:', e);
+  }
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -270,6 +313,9 @@ module.exports = async (req, res) => {
         await sendEbookEmail(customerEmail, customerName, ebooks, totalAmount);
         console.log(`Email sent to ${customerEmail} with ${ebooks.length} ebook(s)`);
       }
+
+      // Notif admin systématique
+      await sendAdminNotification(session, fullSession);
 
     } catch (error) {
       console.error('Error processing webhook:', error);

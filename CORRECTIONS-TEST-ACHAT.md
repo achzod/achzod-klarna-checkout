@@ -48,3 +48,5 @@
 2. ⚠️ **À FAIRE** : Changer le nom du business dans Stripe FR dashboard
 3. ⚠️ **À FAIRE** : Vérifier la devise dans Webflow Commerce settings
 
+
+

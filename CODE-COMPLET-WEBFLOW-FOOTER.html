@@ -1,0 +1,446 @@
+<!-- Crisp Chat -->
+<script type="text/javascript">
+  window.$crisp=[];
+  window.CRISP_WEBSITE_ID="5978a10d-caf5-4195-bf31-ea0223759bf7";
+  (function(){
+    var d=document,s=d.createElement("script");
+    s.src="https://client.crisp.chat/l.js";
+    s.async=1;
+    d.getElementsByTagName("head")[0].appendChild(s);
+  })();
+</script>
+
+<style>
+  /* TOP BAR - z-index réduit pour ne pas cacher le header */
+  #ac-promo-bar{
+    position:fixed; top:0; left:0; right:0;
+    z-index:100; /* Réduit de 2147483000 à 100 */
+    background:linear-gradient(90deg,#FFB3C7 0%, #0b74c8 100%);
+    padding:10px 14px;
+    display:flex; justify-content:center; align-items:center;
+    gap:26px; flex-wrap:wrap;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    box-shadow:0 2px 10px rgba(0,0,0,.14);
+  }
+  #ac-promo-bar .ac-pill{
+    display:flex; align-items:center; gap:10px;
+    font-weight:800; font-size:13px; line-height:1;
+    color:#0A0B09;
+    background:rgba(255,255,255,.92);
+    padding:7px 12px;
+    border-radius:999px;
+  }
+  #ac-promo-bar .ac-pill img{ height:18px; width:auto; display:block; }
+  #ac-promo-bar .ac-pill.ac-klarna { background:#FFB3C7; color:#0A0B09; }
+  #ac-promo-bar .ac-pill.ac-paypal { background:#ffffff; color:#0b74c8; }
+
+  /* Header Webflow passe au-dessus de la barre promo */
+  header,
+  .w-nav,
+  [data-w-id],
+  .w-commerce-commercecartwrapper,
+  .w-commerce-commercecartopenlink {
+    position: relative !important;
+    z-index: 1000 !important;
+  }
+
+  body{ padding-top:56px !important; }
+
+  #ac-klarna-fixed{
+    position:fixed; left:0; right:0; bottom:0;
+    z-index:2147483001;
+    padding:12px 14px;
+    background:linear-gradient(135deg,#FFB3C7,#FFA0B8);
+    box-shadow:0 -2px 14px rgba(0,0,0,.18);
+    display:none;
+  }
+  #ac-klarna-fixed button{
+    width:100%; max-width:520px;
+    margin:0 auto;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    padding:14px 18px;
+    border:0; border-radius:10px;
+    background:#0A0B09;
+    color:#fff;
+    font-weight:900;
+    font-size:16px;
+    cursor:pointer;
+  }
+  #ac-klarna-fixed button img{ height:20px; width:auto; display:block; }
+
+  .ac-cart-badge{
+    margin:10px 0 0;
+    padding:10px 12px;
+    border-radius:10px;
+    background:rgba(255,179,199,.18);
+    border:1px solid rgba(255,179,199,.35);
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-weight:800; font-size:12px;
+  }
+  .ac-cart-badge .left, .ac-cart-badge .right{ display:flex; align-items:center; gap:8px; }
+  .ac-cart-badge img{ height:16px; width:auto; display:block; }
+
+  /* Mobile fixes */
+  @media (max-width: 768px) {
+    #ac-promo-bar {
+      gap: 12px !important;
+      font-size: 11px !important;
+      padding: 6px 10px !important;
+      flex-wrap: nowrap !important;
+    }
+    #ac-promo-bar .ac-pill {
+      padding: 5px 10px !important;
+      font-size: 10px !important;
+    }
+    #ac-promo-bar .ac-pill img {
+      height: 14px !important;
+    }
+    #ac-promo-bar .ac-pill span {
+      white-space: nowrap;
+    }
+    body {
+      padding-top: 42px !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    #ac-promo-bar {
+      gap: 8px !important;
+      font-size: 9px !important;
+      padding: 4px 6px !important;
+    }
+    #ac-promo-bar .ac-pill {
+      padding: 4px 8px !important;
+      font-size: 9px !important;
+    }
+    #ac-promo-bar .ac-pill img {
+      height: 12px !important;
+    }
+    body {
+      padding-top: 38px !important;
+    }
+  }
+</style>
+
+<!-- TOP BAR -->
+<div id="ac-promo-bar">
+  <div class="ac-pill ac-klarna">
+    <img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna">
+    <span>Paiement en 3x sans frais</span>
+  </div>
+  <div class="ac-pill ac-paypal">
+    <img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal">
+    <span>Paiement en 4x sans frais</span>
+  </div>
+</div>
+
+<!-- KLARNA BUTTON (Checkout only) -->
+<div id="ac-klarna-fixed">
+  <button type="button" id="ac-klarna-btn">
+    <img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna">
+    Payer en 3x sans frais
+  </button>
+</div>
+
+<script>
+(function(){
+  var isCheckout = /\/checkout\/?$/.test(location.pathname);
+  var klarnaWrap = document.getElementById('ac-klarna-fixed');
+  var klarnaBtn = document.getElementById('ac-klarna-btn');
+
+  if (isCheckout) {
+    klarnaWrap.style.display = 'block';
+    document.body.style.paddingBottom = '90px';
+  }
+
+  function parseEuro(txt){
+    if(!txt) return null;
+    var s = String(txt).replace(/\u00a0/g,' ');
+    var m = s.match(/€\s*([\d\s]+)[,.](\d{2})/) || s.match(/([\d\s]+)[,.](\d{2})\s*€/) || s.match(/([\d\s]+)[,.](\d{2})/);
+    if(!m) return null;
+    var euros = (m[1]||'').replace(/\s/g,'');
+    var cents = m[2]||'00';
+    var n = parseFloat(euros + '.' + cents);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function getCheckoutPayload(){
+    var items = [];
+    var els = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
+    for (var i=0;i<els.length;i++){
+      var nameEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
+      var priceEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemprice');
+      var name = nameEl ? nameEl.innerText.trim() : 'Produit';
+      var price = parseEuro(priceEl ? priceEl.innerText : els[i].innerText);
+      if (price && price > 0){
+        items.push({ name: name.substring(0,80), price: price, quantity: 1 });
+      }
+    }
+    var totalEl = document.querySelector('.w-commerce-commercecheckoutsummarytotal');
+    var totalAmount = totalEl ? parseEuro(totalEl.innerText) : null;
+    var emailEl = document.querySelector('input[type="email"]');
+    var customerEmail = emailEl ? (emailEl.value || '') : '';
+
+    var payload = {
+      items: items,
+      customerEmail: customerEmail,
+      successUrl: 'https://achzodcoaching.com/order-confirmation',
+      cancelUrl: 'https://achzodcoaching.com/checkout'
+    };
+    if (totalAmount && items.length){
+      var itemsTotal = items.reduce(function(sum,it){ return sum + (it.price||0); }, 0);
+      if (Math.abs(totalAmount - itemsTotal) > 1) payload.totalAmount = totalAmount;
+    }
+    return payload;
+  }
+
+  async function klarnaGo(){
+    if(!isCheckout) return;
+    var original = klarnaBtn.innerHTML;
+    klarnaBtn.disabled = true;
+    klarnaBtn.style.opacity = '0.75';
+    klarnaBtn.innerHTML = 'Chargement...';
+    try {
+      var payload = getCheckoutPayload();
+      if (!payload.items || payload.items.length === 0) throw new Error('Panier vide');
+      var r = await fetch('https://achzod-klarna-checkout.onrender.com/checkout-klarna', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      var d = await r.json();
+      if (!r.ok) throw new Error(d && d.error ? d.error : ('HTTP ' + r.status));
+      if (!d || !d.url) throw new Error('Réponse invalide');
+      location.href = d.url;
+    } catch (e) {
+      alert('Erreur Klarna: ' + (e && e.message ? e.message : 'inconnue'));
+      klarnaBtn.disabled = false;
+      klarnaBtn.style.opacity = '1';
+      klarnaBtn.innerHTML = original;
+    }
+  }
+
+  if (klarnaBtn) klarnaBtn.addEventListener('click', klarnaGo);
+
+  function ensureCartBadge(root){
+    if(!root || root.querySelector('.ac-cart-badge')) return;
+    var badge = document.createElement('div');
+    badge.className = 'ac-cart-badge';
+    badge.innerHTML =
+      '<div class="left"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna"><span>3x sans frais</span></div>' +
+      '<div class="right"><img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal"><span>4x sans frais</span></div>';
+    root.prepend(badge);
+  }
+
+  var obs = new MutationObserver(function(){
+    var cart = document.querySelector('.w-commerce-commercecartcontainerwrapper, .w-commerce-commercecartcontainer');
+    if (cart) ensureCartBadge(cart);
+  });
+  obs.observe(document.documentElement, {subtree:true, childList:true});
+})();
+</script>
+
+<!-- =========================================== -->
+<!-- FIX PAGE ORDER CONFIRMATION POUR KLARNA   -->
+<!-- =========================================== -->
+<script>
+(function() {
+  // Attendre que le DOM soit chargé
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  
+  function init() {
+    // Récupérer session_id depuis l'URL (pour paiements Klarna/Stripe)
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    const orderId = urlParams.get('orderId'); // Pour paiements Webflow normaux
+    
+    // Si c'est un paiement Webflow normal (avec orderId), ne rien faire
+    if (orderId) {
+      console.log('✅ Commande Webflow normale, pas besoin de récupérer depuis API');
+      return;
+    }
+    
+    // Si pas de session_id, c'est peut-être une page vide ou erreur
+    if (!sessionId) {
+      console.log('⚠️ Pas de session_id ni orderId dans l\'URL - page peut être vide');
+      return;
+    }
+
+    console.log('🔍 Récupération données commande Klarna/Stripe pour session:', sessionId);
+
+    // Récupérer les données de la commande depuis notre API
+    fetch(`https://achzod-klarna-checkout.onrender.com/order-data?session_id=${sessionId}`)
+    .then(response => response.json())
+    .then(data => {
+      if (!data.success) {
+        console.error('❌ Erreur:', data.error);
+        return;
+      }
+
+      console.log('✅ Données commande reçues:', data);
+
+      const order = data.order;
+      const totalFormatted = `${order.total} ${order.currency === 'EUR' ? '€' : order.currency}`;
+      
+      // Fonction pour remplacer tous les montants $0.00 ou 0,00
+      function replaceAmounts() {
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+          null,
+          false
+        );
+        
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+          textNodes.push(node);
+        }
+        
+        textNodes.forEach(textNode => {
+          const text = textNode.textContent;
+          if (text && (
+            text.includes('$0.00') || 
+            text.includes('€ 0,00') || 
+            text.includes('0,00 €') ||
+            text.includes('0.00 €') ||
+            (text.match(/0[,.]00/) && (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ')))
+          )) {
+            if (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || text.includes('Total')) {
+              textNode.textContent = text.replace(/\$?0[,.]00\s*€?/g, totalFormatted);
+            }
+          }
+        });
+      }
+      
+      // Mettre à jour les montants affichés
+      const totalSelectors = [
+        '.w-commerce-commercecheckoutsummarytotal',
+        '[data-wf-bindings*="total"]',
+        '.order-total',
+        '.total-amount',
+        '.checkout-total',
+        'div[class*="total"]',
+        'span[class*="total"]'
+      ];
+      
+      totalSelectors.forEach(selector => {
+        try {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            const text = el.textContent || el.innerText || '';
+            if (text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00') || text.includes('0.00 €') || text.includes('0.00')) {
+              const parentText = el.parentElement ? el.parentElement.textContent : '';
+              if (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || parentText.includes('TOTAL') || parentText.includes('Total')) {
+                el.textContent = totalFormatted;
+                el.style.color = '#000';
+                el.style.fontWeight = 'bold';
+              }
+            }
+          });
+        } catch (e) {}
+      });
+      
+      // Chercher aussi dans les récapitulatifs de commande
+      const summaryBlocks = document.querySelectorAll('.w-commerce-commercecheckoutsummaryblock, .order-summary, .checkout-summary, [class*="summary"]');
+      summaryBlocks.forEach(block => {
+        const blockText = block.textContent || '';
+        if (blockText.includes('TOTAL') || blockText.includes('Total') || blockText.includes('RÉGLÉ')) {
+          const amountElements = block.querySelectorAll('div, span, p, td');
+          amountElements.forEach(el => {
+            const text = el.textContent || '';
+            if ((text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00')) && 
+                (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || el.parentElement?.textContent?.includes('TOTAL'))) {
+              el.textContent = totalFormatted;
+              el.style.fontWeight = 'bold';
+            }
+          });
+        }
+      });
+      
+      replaceAmounts();
+
+      // Mettre à jour le sous-total
+      const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2);
+      const subtotalFormatted = `${subtotal} ${order.currency === 'EUR' ? '€' : order.currency}`;
+      const subtotalElements = document.querySelectorAll('[data-wf-bindings*="subtotal"], .cart-subtotal-text, [class*="subtotal"]');
+      subtotalElements.forEach(el => {
+        const text = el.textContent || '';
+        if (text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00')) {
+          el.textContent = subtotalFormatted;
+        }
+      });
+
+      // Mettre à jour les prix des items
+      const itemElements = document.querySelectorAll('.w-commerce-commercecheckoutorderitem, [class*="orderitem"]');
+      itemElements.forEach((el, index) => {
+        if (index < order.items.length) {
+          const item = order.items[index];
+          const priceEl = el.querySelector('.w-commerce-commercecheckoutorderitemprice, .checkout-price, [class*="price"]');
+          if (priceEl) {
+            const priceText = priceEl.textContent || '';
+            if (priceText.includes('$0.00') || priceText.includes('0,00') || priceText.includes('€ 0,00')) {
+              priceEl.textContent = `${(item.price * item.quantity).toFixed(2)} ${order.currency === 'EUR' ? '€' : order.currency}`;
+            }
+          }
+        }
+      });
+
+      // Afficher les liens de téléchargement si des ebooks sont trouvés
+      if (data.ebooks && data.ebooks.length > 0) {
+        const downloadsSection = document.querySelector('.w-commerce-commercedownloadswrapper, .downloads, [class*="download"]');
+        if (downloadsSection) {
+          const downloadsList = downloadsSection.querySelector('.w-commerce-commercedownloadslist, .downloads-list, [class*="download"]');
+          if (downloadsList) {
+            downloadsList.innerHTML = '';
+            data.ebooks.forEach(ebook => {
+              const item = document.createElement('div');
+              item.className = 'w-commerce-commercedownloadsitem download-item';
+              item.innerHTML = `
+                <div class="download-text">${ebook.name}</div>
+                <a href="${ebook.link}" target="_blank" class="download-button w-button">Télécharger</a>
+              `;
+              downloadsList.appendChild(item);
+            });
+          }
+        } else {
+          const orderContainer = document.querySelector('.w-commerce-commerceorderconfirmationcontainer, .order-confirmation-container, [class*="confirmation"]');
+          if (orderContainer) {
+            const downloadsSection = document.createElement('div');
+            downloadsSection.className = 'w-commerce-commercedownloadswrapper downloads';
+            downloadsSection.style.marginTop = '20px';
+            downloadsSection.style.padding = '20px';
+            downloadsSection.style.backgroundColor = '#f5f5f5';
+            downloadsSection.style.borderRadius = '8px';
+            downloadsSection.innerHTML = `
+              <div class="w-commerce-commercecheckoutsummaryblockheader block-header confirmation">
+                <h4 class="checkout-section-headine" style="font-size: 18px; font-weight: bold; margin-bottom: 15px;">Téléchargez votre e-book</h4>
+              </div>
+              <fieldset class="w-commerce-commercecheckoutblockcontent">
+                <div class="w-commerce-commercedownloadslist downloads-list">
+                  ${data.ebooks.map(ebook => `
+                    <div class="w-commerce-commercedownloadsitem download-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 10px; background: white; border-radius: 4px;">
+                      <div class="download-text" style="font-weight: 500;">${ebook.name}</div>
+                      <a href="${ebook.link}" target="_blank" class="download-button w-button" style="padding: 8px 16px; background: #0A0B09; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Télécharger</a>
+                    </div>
+                  `).join('')}
+                </div>
+              </fieldset>
+            `;
+            orderContainer.insertBefore(downloadsSection, orderContainer.firstChild);
+          }
+        }
+      }
+
+      console.log('✅ Page mise à jour avec les données de la commande');
+    })
+    .catch(error => {
+      console.error('❌ Erreur récupération données:', error);
+    });
+})();
+</script>
+

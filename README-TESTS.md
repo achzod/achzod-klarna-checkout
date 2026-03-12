@@ -73,3 +73,5 @@ Le script affiche :
 - Les sessions expirent après 30 minutes
 - Les tests peuvent prendre quelques minutes (pause de 1s entre chaque test)
 
+
+

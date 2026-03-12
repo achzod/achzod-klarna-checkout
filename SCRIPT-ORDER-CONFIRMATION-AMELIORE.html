@@ -1,0 +1,246 @@
+<!-- =========================================== -->
+<!-- FIX PAGE ORDER CONFIRMATION POUR KLARNA   -->
+<!-- =========================================== -->
+<script>
+(function() {
+  // Attendre que le DOM soit chargé
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  
+  function init() {
+    // Récupérer session_id depuis l'URL (pour paiements Klarna/Stripe)
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    const orderId = urlParams.get('orderId'); // Pour paiements Webflow normaux
+    
+    // Si c'est un paiement Webflow normal (avec orderId), ne rien faire
+    if (orderId) {
+      console.log('✅ Commande Webflow normale, pas besoin de récupérer depuis API');
+      return;
+    }
+    
+    // Si pas de session_id, c'est peut-être une page vide ou erreur
+    if (!sessionId) {
+      console.log('⚠️ Pas de session_id ni orderId dans l\'URL - page peut être vide');
+      return;
+    }
+
+    console.log('🔍 Récupération données commande Klarna/Stripe pour session:', sessionId);
+
+    // Récupérer les données de la commande depuis notre API
+    fetch(`https://achzod-klarna-checkout.onrender.com/order-data?session_id=${sessionId}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (!data.success) {
+          console.error('❌ Erreur API:', data.error);
+          showError('Impossible de récupérer les données de la commande. Contacte le support.');
+          return;
+        }
+
+        console.log('✅ Données commande reçues:', data);
+
+        const order = data.order;
+        if (!order) {
+          console.error('❌ Pas de données order dans la réponse');
+          return;
+        }
+
+        const totalFormatted = `${order.total} ${order.currency === 'EUR' ? '€' : order.currency}`;
+        
+        // Attendre un peu que Webflow charge ses éléments
+        setTimeout(() => {
+          updatePageWithOrderData(order, totalFormatted, data.ebooks || []);
+        }, 500);
+        
+        // Réessayer après 1 seconde au cas où Webflow charge lentement
+        setTimeout(() => {
+          updatePageWithOrderData(order, totalFormatted, data.ebooks || []);
+        }, 1000);
+      })
+      .catch(error => {
+        console.error('❌ Erreur récupération données:', error);
+        showError('Erreur de connexion. Actualise la page.');
+      });
+  }
+  
+  function updatePageWithOrderData(order, totalFormatted, ebooks) {
+    console.log('🔄 Mise à jour de la page avec les données...');
+    
+    // 1. Remplacer tous les montants $0.00 ou 0,00 dans la page
+    const allTextNodes = [];
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const text = node.textContent;
+      if (text && (
+        text.includes('$0.00') || 
+        text.includes('€ 0,00') || 
+        text.includes('0,00 €') ||
+        text.includes('0.00 €') ||
+        text.includes('0,00') ||
+        text.includes('0.00')
+      )) {
+        // Vérifier si c'est dans un contexte de total/montant
+        const parent = node.parentElement;
+        if (parent) {
+          const parentText = parent.textContent || '';
+          if (parentText.includes('TOTAL') || parentText.includes('Total') || parentText.includes('RÉGLÉ') || 
+              parentText.includes('Sous-total') || parentText.includes('Subtotal') ||
+              parentText.includes('€') || parentText.includes('EUR')) {
+            // Remplacer le texte
+            node.textContent = text.replace(/\$?0[,.]00\s*€?/g, totalFormatted)
+                                   .replace(/0[,.]00/g, order.total);
+          }
+        }
+      }
+    }
+    
+    // 2. Mettre à jour les éléments spécifiques Webflow
+    const totalSelectors = [
+      '.w-commerce-commercecheckoutsummarytotal',
+      '[data-wf-bindings*="total"]',
+      '.order-total',
+      '.total-amount',
+      '.checkout-total',
+      'div[class*="total"]',
+      'span[class*="total"]',
+      'td[class*="total"]'
+    ];
+    
+    totalSelectors.forEach(selector => {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => {
+          const text = el.textContent || el.innerText || '';
+          if (text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00') || 
+              text.includes('0.00 €') || text.includes('0.00') || text.includes('0,00')) {
+            const parentText = el.parentElement ? el.parentElement.textContent : '';
+            if (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || 
+                parentText.includes('TOTAL') || parentText.includes('Total') || 
+                parentText.includes('RÉGLÉ')) {
+              el.textContent = totalFormatted;
+              el.style.color = '#000';
+              el.style.fontWeight = 'bold';
+            }
+          }
+        });
+      } catch (e) {
+        // Ignorer les sélecteurs invalides
+      }
+    });
+    
+    // 3. Mettre à jour les récapitulatifs
+    const summaryBlocks = document.querySelectorAll(
+      '.w-commerce-commercecheckoutsummaryblock, .order-summary, .checkout-summary, [class*="summary"]'
+    );
+    summaryBlocks.forEach(block => {
+      const blockText = block.textContent || '';
+      if (blockText.includes('TOTAL') || blockText.includes('Total') || blockText.includes('RÉGLÉ')) {
+        const amountElements = block.querySelectorAll('div, span, p, td, strong, b');
+        amountElements.forEach(el => {
+          const text = el.textContent || '';
+          if ((text.includes('$0.00') || text.includes('0,00') || text.includes('€ 0,00')) && 
+              (text.includes('TOTAL') || text.includes('Total') || text.includes('RÉGLÉ') || 
+               el.parentElement?.textContent?.includes('TOTAL'))) {
+            el.textContent = totalFormatted;
+            el.style.fontWeight = 'bold';
+          }
+        });
+      }
+    });
+    
+    // 4. Mettre à jour les items
+    if (order.items && order.items.length > 0) {
+      const itemElements = document.querySelectorAll('.w-commerce-commercecheckoutorderitem, [class*="orderitem"]');
+      itemElements.forEach((el, index) => {
+        if (index < order.items.length) {
+          const item = order.items[index];
+          const priceEl = el.querySelector('.w-commerce-commercecheckoutorderitemprice, .checkout-price, [class*="price"]');
+          if (priceEl) {
+            const priceText = priceEl.textContent || '';
+            if (priceText.includes('$0.00') || priceText.includes('0,00') || priceText.includes('€ 0,00')) {
+              priceEl.textContent = `${(item.price * item.quantity).toFixed(2)} ${order.currency === 'EUR' ? '€' : order.currency}`;
+            }
+          }
+        }
+      });
+    }
+    
+    // 5. Afficher les liens de téléchargement
+    if (ebooks && ebooks.length > 0) {
+      displayEbooks(ebooks);
+    }
+    
+    console.log('✅ Page mise à jour');
+  }
+  
+  function displayEbooks(ebooks) {
+    let downloadsSection = document.querySelector('.w-commerce-commercedownloadswrapper, .downloads, [class*="download"]');
+    
+    if (downloadsSection) {
+      let downloadsList = downloadsSection.querySelector('.w-commerce-commercedownloadslist, .downloads-list, [class*="download"]');
+      if (downloadsList) {
+        downloadsList.innerHTML = '';
+        ebooks.forEach(ebook => {
+          const item = document.createElement('div');
+          item.className = 'w-commerce-commercedownloadsitem download-item';
+          item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;';
+          item.innerHTML = `
+            <div class="download-text" style="font-weight: 500; color: #333;">${ebook.name}</div>
+            <a href="${ebook.link}" target="_blank" class="download-button w-button" style="padding: 8px 16px; background: #0A0B09; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">Télécharger</a>
+          `;
+          downloadsList.appendChild(item);
+        });
+        return;
+      }
+    }
+    
+    // Créer la section si elle n'existe pas
+    const orderContainer = document.querySelector(
+      '.w-commerce-commerceorderconfirmationcontainer, .order-confirmation-container, [class*="confirmation"], main, .checkout-container'
+    );
+    if (orderContainer) {
+      downloadsSection = document.createElement('div');
+      downloadsSection.className = 'w-commerce-commercedownloadswrapper downloads';
+      downloadsSection.style.cssText = 'margin: 30px 0; padding: 24px; background: #f5f5f5; border-radius: 12px; border: 1px solid #e0e0e0;';
+      downloadsSection.innerHTML = `
+        <div style="margin-bottom: 20px;">
+          <h4 style="font-size: 20px; font-weight: bold; margin: 0 0 15px 0; color: #000;">📥 Téléchargez votre e-book</h4>
+        </div>
+        <div class="w-commerce-commercedownloadslist downloads-list">
+          ${ebooks.map(ebook => `
+            <div class="w-commerce-commercedownloadsitem download-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+              <div class="download-text" style="font-weight: 500; color: #333;">${ebook.name}</div>
+              <a href="${ebook.link}" target="_blank" class="download-button w-button" style="padding: 8px 16px; background: #0A0B09; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px;">Télécharger</a>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      orderContainer.insertBefore(downloadsSection, orderContainer.firstChild);
+    }
+  }
+  
+  function showError(message) {
+    console.error('❌', message);
+    // Optionnel: afficher une alerte à l'utilisateur
+    // alert(message);
+  }
+})();
+</script>
+
+
+

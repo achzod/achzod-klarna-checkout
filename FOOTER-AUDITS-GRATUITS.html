@@ -1,0 +1,143 @@
+<!-- ============================================
+     BARRE FOOTER - AUDITS GRATUITS + CHAT
+     ============================================
+     
+     À AJOUTER DANS :
+     Webflow > Site Settings > Custom Code > Footer Code
+     
+     ⚠️ À AJOUTER APRÈS ton code existant (Crisp Chat + Klarna)
+     Ne supprime RIEN de ton code actuel !
+     ============================================ -->
+
+<style>
+  /* Barre footer fixe en bas - AUDITS GRATUITS */
+  #achzod-footer-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2147483002; /* Au-dessus du bouton Klarna */
+    background: linear-gradient(135deg, #0A0B09 0%, #1a1b19 100%);
+    padding: 16px 20px;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+  }
+
+  #achzod-footer-bar a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #FFB3C7, #FFA0B8);
+    color: #0A0B09;
+    font-weight: 900;
+    font-size: 14px;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(255, 179, 199, 0.3);
+    white-space: nowrap;
+  }
+
+  #achzod-footer-bar a:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(255, 179, 199, 0.5);
+    background: linear-gradient(135deg, #FFA0B8, #FF8FAD);
+  }
+
+  #achzod-footer-bar .badge {
+    background: #FFD700;
+    color: #0A0B09;
+    font-size: 10px;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  #achzod-footer-bar .icon {
+    font-size: 18px;
+  }
+
+  /* Ajuster l'espace en bas pour les audits + Klarna sur checkout */
+  body:not(.checkout-page) {
+    padding-bottom: 90px !important; /* Juste la barre audits */
+  }
+
+  /* Responsive Mobile */
+  @media (max-width: 768px) {
+    #achzod-footer-bar {
+      padding: 12px 10px;
+      gap: 8px;
+    }
+
+    #achzod-footer-bar a {
+      padding: 10px 14px;
+      font-size: 11px;
+      flex: 1 1 auto;
+      min-width: 140px;
+    }
+
+    #achzod-footer-bar .badge {
+      font-size: 8px;
+      padding: 2px 6px;
+    }
+
+    body:not(.checkout-page) {
+      padding-bottom: 110px !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    #achzod-footer-bar {
+      flex-direction: column;
+      padding: 10px;
+      gap: 8px;
+    }
+
+    #achzod-footer-bar a {
+      width: 100%;
+      font-size: 12px;
+    }
+
+    body:not(.checkout-page) {
+      padding-bottom: 180px !important;
+    }
+  }
+</style>
+
+<!-- Barre Footer Audits Gratuits -->
+<div id="achzod-footer-bar">
+  <a href="https://form.typeform.com/to/rzHLOoUx" target="_blank" rel="noopener">
+    <span class="icon">🎯</span>
+    <span>Audit Complet GRATUIT</span>
+    <span class="badge">Bientôt 79€</span>
+  </a>
+  
+  <a href="https://form.typeform.com/to/H45jf8VZ" target="_blank" rel="noopener">
+    <span class="icon">💪</span>
+    <span>Audit Anabolique GRATUIT</span>
+  </a>
+  
+  <a href="https://achzod-chat-orientation.onrender.com/" target="_blank" rel="noopener">
+    <span class="icon">💬</span>
+    <span>Chat Orientation Gratuit</span>
+  </a>
+</div>
+
+<script>
+// Ajuster le padding si on est sur checkout (audits + bouton Klarna)
+(function() {
+  var isCheckout = /\/checkout\/?$/.test(location.pathname);
+  if (isCheckout) {
+    document.body.classList.add('checkout-page');
+    document.body.style.paddingBottom = '180px'; // Audits (90px) + Klarna (90px)
+  }
+})();
+</script>
+

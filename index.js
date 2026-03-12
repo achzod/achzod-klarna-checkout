@@ -974,6 +974,38 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Achzod Klarna Checkout API' });
 });
 
+// Diagnostic endpoint (pour vérifier la config sans exposer les secrets)
+app.get('/diagnostic', (req, res) => {
+  const config = {
+    email: {
+      EMAIL_USER: process.env.EMAIL_USER ? '✅ ' + process.env.EMAIL_USER : '❌ NON DÉFINI',
+      EMAIL_PASS: process.env.EMAIL_PASS ? '✅ configuré (' + process.env.EMAIL_PASS.length + ' chars)' : '❌ NON DÉFINI',
+    },
+    stripe_uae: {
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '✅ configuré' : '❌ NON DÉFINI',
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ? '✅ configuré' : '❌ NON DÉFINI',
+    },
+    stripe_fr: {
+      STRIPE_SECRET_KEY_FR: process.env.STRIPE_SECRET_KEY_FR ? '✅ configuré' : '❌ NON DÉFINI',
+      STRIPE_WEBHOOK_SECRET_FR: process.env.STRIPE_WEBHOOK_SECRET_FR ? '✅ configuré' : '❌ NON DÉFINI',
+    },
+    status: {
+      stripeFR_initialized: stripeFR ? '✅ oui' : '❌ non (STRIPE_SECRET_KEY_FR manquant)',
+      transporter_ready: transporter ? '✅ oui' : '❌ non',
+    }
+  };
+  
+  const allOK = process.env.EMAIL_USER && process.env.EMAIL_PASS && 
+                process.env.STRIPE_SECRET_KEY_FR && process.env.STRIPE_WEBHOOK_SECRET_FR;
+  
+  res.json({
+    status: allOK ? 'OK' : 'CONFIGURATION_INCOMPLETE',
+    message: allOK ? 'Toutes les variables Klarna sont configurées' : 'Variables manquantes pour Klarna',
+    config,
+    help: allOK ? null : 'Voir DIAGNOSTIC-NOTIFICATIONS.md pour les instructions'
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

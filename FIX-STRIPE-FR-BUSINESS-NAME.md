@@ -25,3 +25,5 @@ Je peux créer un script pour mettre à jour le nom du business via l'API Stripe
 
 Après avoir changé le nom, les prochains emails Klarna devraient afficher "AchzodCoaching" au lieu de "achkan hosseini maneche".
 
+
+

@@ -39,3 +39,5 @@ Après cette modification, tous les futurs reçus Stripe (Klarna) afficheront "A
 
 Cette modification ne s'applique qu'aux **futurs** paiements. Les reçus déjà envoyés (comme celui du client qui a commandé Anabolic Code) ne seront pas mis à jour rétroactivement.
 
+
+

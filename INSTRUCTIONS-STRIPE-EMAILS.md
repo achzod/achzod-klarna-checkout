@@ -66,3 +66,5 @@
 - Tous les emails de notification Stripe iront à achzodyt@gmail.com
 - Les emails envoyés aux clients n'utilisent plus le nom personnel, seulement "achzodcoaching"
 
+
+

@@ -974,28 +974,34 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Achzod Klarna Checkout API' });
 });
 
-// Route pour créer le webhook Stripe FR automatiquement (une seule fois)
+// Route pour créer/récupérer le webhook Stripe FR automatiquement
 app.get('/setup-webhook-fr', async (req, res) => {
   if (!stripeFR) {
     return res.status(500).json({ error: 'STRIPE_SECRET_KEY_FR non configuré' });
   }
   
   try {
-    // Vérifier si le webhook existe déjà
     const existingWebhooks = await stripeFR.webhookEndpoints.list({ limit: 100 });
     const webhookUrl = 'https://achzod-klarna-checkout.onrender.com/webhook-klarna';
     
     const existing = existingWebhooks.data.find(w => w.url === webhookUrl);
     
     if (existing) {
-      return res.json({
-        status: 'EXISTS',
-        message: 'Le webhook existe déjà',
-        webhook_id: existing.id,
-        url: existing.url,
-        events: existing.enabled_events,
-        note: 'Va dans Stripe Dashboard FR > Developers > Webhooks pour récupérer le Signing secret et l\'ajouter sur Render comme STRIPE_WEBHOOK_SECRET_FR'
-      });
+      // Le webhook existe, on le supprime et on en crée un nouveau pour avoir le secret
+      if (req.query.recreate === 'true') {
+        await stripeFR.webhookEndpoints.del(existing.id);
+        console.log('Ancien webhook supprimé:', existing.id);
+      } else {
+        return res.json({
+          status: 'EXISTS',
+          message: 'Le webhook existe déjà',
+          webhook_id: existing.id,
+          url: existing.url,
+          events: existing.enabled_events,
+          action: 'Ajoute ?recreate=true à l\'URL pour le recréer et obtenir le secret',
+          note: 'Ou va dans Stripe Dashboard > Developers > Webhooks pour révéler le Signing secret'
+        });
+      }
     }
     
     // Créer le webhook
@@ -1012,17 +1018,20 @@ app.get('/setup-webhook-fr', async (req, res) => {
       url: webhook.url,
       events: webhook.enabled_events,
       secret: webhook.secret,
+      IMPORTANT: '⬆️ COPIE CE SECRET ET AJOUTE-LE SUR RENDER',
       instructions: [
-        '1. Copie le secret ci-dessus (whsec_...)',
-        '2. Va sur Render > achzod-klarna-checkout > Environment',
-        '3. Ajoute: STRIPE_WEBHOOK_SECRET_FR = ' + (webhook.secret || '[voir dans Stripe Dashboard]'),
-        '4. Save Changes > Manual Deploy',
-        '5. Les notifications Klarna fonctionneront !'
+        '1. Copie le secret ci-dessus: ' + webhook.secret,
+        '2. Va sur https://dashboard.render.com',
+        '3. Clique sur achzod-klarna-checkout',
+        '4. Va dans Environment > Environment Variables',
+        '5. Ajoute: STRIPE_WEBHOOK_SECRET_FR = ' + webhook.secret,
+        '6. Clique Save Changes puis Manual Deploy',
+        '7. C\'est fait ! Les notifications Klarna fonctionneront !'
       ]
     });
     
   } catch (error) {
-    console.error('Erreur création webhook:', error);
+    console.error('Erreur webhook:', error);
     res.status(500).json({ error: error.message });
   }
 });

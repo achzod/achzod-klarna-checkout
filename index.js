@@ -974,6 +974,59 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Achzod Klarna Checkout API' });
 });
 
+// Route pour créer le webhook Stripe FR automatiquement (une seule fois)
+app.get('/setup-webhook-fr', async (req, res) => {
+  if (!stripeFR) {
+    return res.status(500).json({ error: 'STRIPE_SECRET_KEY_FR non configuré' });
+  }
+  
+  try {
+    // Vérifier si le webhook existe déjà
+    const existingWebhooks = await stripeFR.webhookEndpoints.list({ limit: 100 });
+    const webhookUrl = 'https://achzod-klarna-checkout.onrender.com/webhook-klarna';
+    
+    const existing = existingWebhooks.data.find(w => w.url === webhookUrl);
+    
+    if (existing) {
+      return res.json({
+        status: 'EXISTS',
+        message: 'Le webhook existe déjà',
+        webhook_id: existing.id,
+        url: existing.url,
+        events: existing.enabled_events,
+        note: 'Va dans Stripe Dashboard FR > Developers > Webhooks pour récupérer le Signing secret et l\'ajouter sur Render comme STRIPE_WEBHOOK_SECRET_FR'
+      });
+    }
+    
+    // Créer le webhook
+    const webhook = await stripeFR.webhookEndpoints.create({
+      url: webhookUrl,
+      enabled_events: ['checkout.session.completed'],
+      description: 'Webhook Klarna ACHZOD - Notifications commandes'
+    });
+    
+    res.json({
+      status: 'CREATED',
+      message: 'Webhook créé avec succès !',
+      webhook_id: webhook.id,
+      url: webhook.url,
+      events: webhook.enabled_events,
+      secret: webhook.secret,
+      instructions: [
+        '1. Copie le secret ci-dessus (whsec_...)',
+        '2. Va sur Render > achzod-klarna-checkout > Environment',
+        '3. Ajoute: STRIPE_WEBHOOK_SECRET_FR = ' + (webhook.secret || '[voir dans Stripe Dashboard]'),
+        '4. Save Changes > Manual Deploy',
+        '5. Les notifications Klarna fonctionneront !'
+      ]
+    });
+    
+  } catch (error) {
+    console.error('Erreur création webhook:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Diagnostic endpoint (pour vérifier la config sans exposer les secrets)
 app.get('/diagnostic', (req, res) => {
   const config = {

@@ -641,19 +641,21 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
 </html>
   `;
 
+  const adminEmail = process.env.ADMIN_EMAIL || 'achkou@gmail.com';
+  
   const mailOptions = {
     from: {
       name: 'ACHZOD Notifications',
       address: process.env.EMAIL_USER || 'achzodyt@gmail.com'
     },
-    to: 'achzodyt@gmail.com',
+    to: adminEmail,
     subject: `💰 Vente Klarna: ${totalAmount}€ - ${products[0] || 'Produit'}`,
     html: htmlNotification
   };
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log('Notification envoyée à achzodyt@gmail.com');
+    console.log('Notification envoyée à', adminEmail);
     return true;
   } catch (error) {
     console.error('Erreur envoi notification:', error);

@@ -1070,6 +1070,67 @@ app.get('/diagnostic', (req, res) => {
   });
 });
 
+// Diag: tester l'envoi d'email (Gmail App Password)
+app.get('/test-email', async (req, res) => {
+  try {
+    const to = req.query.to || process.env.EMAIL_USER || 'achzodyt@gmail.com';
+    const info = await transporter.sendMail({
+      from: `"ACHZOD DIAG" <${process.env.EMAIL_USER || 'achzodyt@gmail.com'}>`,
+      to,
+      subject: '✅ Test email ACHZOD - ' + new Date().toISOString(),
+      text: 'Si tu lis ça, Gmail App Password fonctionne. Donc le problème vient de Stripe (webhook).',
+    });
+    res.json({ status: 'OK', messageId: info.messageId, accepted: info.accepted, rejected: info.rejected });
+  } catch (error) {
+    res.status(500).json({ status: 'ERREUR', error: error.message, code: error.code, command: error.command });
+  }
+});
+
+// Diag: lister les webhooks Stripe FR (état, URL, dernier échec)
+app.get('/list-webhook-fr', async (req, res) => {
+  try {
+    if (!stripeFR) return res.status(400).json({ error: 'stripeFR non initialisé' });
+    const webhooks = await stripeFR.webhookEndpoints.list({ limit: 100 });
+    res.json({
+      count: webhooks.data.length,
+      webhooks: webhooks.data.map(w => ({
+        id: w.id,
+        url: w.url,
+        status: w.status,
+        enabled_events: w.enabled_events,
+        created: new Date(w.created * 1000).toISOString(),
+        description: w.description,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Diag: derniers events checkout.session.completed sur Stripe FR
+app.get('/recent-events-fr', async (req, res) => {
+  try {
+    if (!stripeFR) return res.status(400).json({ error: 'stripeFR non initialisé' });
+    const events = await stripeFR.events.list({
+      type: 'checkout.session.completed',
+      limit: 10,
+    });
+    res.json({
+      count: events.data.length,
+      events: events.data.map(e => ({
+        id: e.id,
+        created: new Date(e.created * 1000).toISOString(),
+        pending_webhooks: e.pending_webhooks,
+        customer_email: e.data.object?.customer_details?.email,
+        amount_total: e.data.object?.amount_total,
+        payment_status: e.data.object?.payment_status,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

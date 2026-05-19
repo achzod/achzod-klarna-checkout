@@ -1107,6 +1107,56 @@ app.get('/list-webhook-fr', async (req, res) => {
   }
 });
 
+// Diag: rejouer manuellement un event Stripe FR (commande non délivrée)
+app.get('/replay-event', async (req, res) => {
+  try {
+    if (!stripeFR) return res.status(400).json({ error: 'stripeFR non initialisé' });
+    const eventId = req.query.id;
+    if (!eventId) return res.status(400).json({ error: 'Paramètre ?id=evt_xxx requis' });
+
+    const event = await stripeFR.events.retrieve(eventId);
+    if (event.type !== 'checkout.session.completed') {
+      return res.status(400).json({ error: 'Event non supporté: ' + event.type });
+    }
+
+    const session = event.data.object;
+    const fullSession = await stripeFR.checkout.sessions.retrieve(session.id, {
+      expand: ['line_items', 'customer_details'],
+    });
+    const customerEmail = fullSession.customer_details?.email || session.customer_email;
+    const customerName = fullSession.customer_details?.name || '';
+    const totalAmount = (fullSession.amount_total / 100).toFixed(2);
+    if (!customerEmail) return res.status(400).json({ error: 'Pas d\'email client sur cet event' });
+
+    const lineItems = await stripeFR.checkout.sessions.listLineItems(session.id);
+    const ebooks = [];
+    const productNames = [];
+    for (const item of lineItems.data) {
+      const productName = item.description || item.price?.product?.name || item.price?.nickname || 'Produit';
+      productNames.push(productName);
+      const ebookData = findEbookLink(productName);
+      if (ebookData) ebooks.push(ebookData);
+    }
+
+    const notifSent = await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, 'Klarna (replay)');
+    const ebookSent = await sendEbookEmail(customerEmail, customerName, ebooks, totalAmount);
+
+    res.json({
+      status: 'REPLAYED',
+      event_id: eventId,
+      customer_email: customerEmail,
+      customer_name: customerName,
+      amount: totalAmount,
+      products: productNames,
+      ebooks_found: ebooks.length,
+      vendor_notif_sent: notifSent,
+      customer_email_sent: ebookSent,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Diag: derniers events checkout.session.completed sur Stripe FR
 app.get('/recent-events-fr', async (req, res) => {
   try {

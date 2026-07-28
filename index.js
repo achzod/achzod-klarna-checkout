@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
+const { CheckoutValidationError, buildLineItems } = require('./checkout-security');
 
 const app = express();
 
@@ -67,12 +68,36 @@ const EBOOK_LINKS = {
   'bioénergétique timing': 'https://gofile.io/d/Hn6GE1',
 };
 
-app.use(cors());
+const ALLOWED_ORIGINS = new Set([
+  'https://achzodcoaching.com',
+  'https://www.achzodcoaching.com',
+]);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+    return callback(new Error('Origin non autorisée'));
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Stripe-Signature', 'Authorization'],
+}));
 
 // Webhook Stripe doit recevoir le body brut
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use('/webhook-klarna', express.raw({ type: 'application/json' }));
 app.use(express.json());
+
+function requireDiagnosticAuth(req, res, next) {
+  const expected = process.env.DIAGNOSTIC_TOKEN;
+  const supplied = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!expected || supplied.length !== expected.length) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const crypto = require('node:crypto');
+  if (!crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  next();
+}
 
 // Mapping des produits Webflow vers les Price IDs Stripe
 const PRICE_MAPPING = {
@@ -148,54 +173,10 @@ function findPriceId(productName, amount) {
 }
 
 // Route principale
-app.post('/checkout', async (req, res) => {
+async function createCheckoutSession(req, res) {
   try {
-    const { items, successUrl, cancelUrl, customerEmail, totalAmount, discountCode } = req.body;
-
-    if (!items || items.length === 0) {
-      return res.status(400).json({ error: 'Panier vide' });
-    }
-
-    let lineItems = [];
-
-    // Si un total avec réduction est fourni, l'utiliser
-    if (totalAmount && totalAmount > 0) {
-      // Créer un seul line item avec le total réel
-      const itemNames = items.map(i => i.name).join(' + ');
-      lineItems = [{
-        price_data: {
-          currency: 'eur',
-          product_data: { 
-            name: itemNames.substring(0, 100),
-            description: discountCode ? `Code promo: ${discountCode}` : undefined
-          },
-          unit_amount: Math.round(totalAmount * 100),
-        },
-        quantity: 1,
-      }];
-    } else {
-      // Pas de réduction, utiliser les prix individuels
-      lineItems = items.map(item => {
-        const priceId = findPriceId(item.name, item.price);
-
-        // Pour les ebooks et produits sans Price ID valide, utiliser price_data
-        // Cela évite les erreurs "No such price" si les Price IDs n'existent pas
-        if (priceId) {
-          // Essayer d'utiliser le Price ID, mais en cas d'erreur, fallback sur price_data
-          return { price: priceId, quantity: item.quantity || 1 };
-        } else {
-          // Pas de Price ID trouvé, utiliser price_data
-          return {
-            price_data: {
-              currency: 'eur',
-              product_data: { name: item.name },
-              unit_amount: Math.round(item.price * 100),
-            },
-            quantity: item.quantity || 1,
-          };
-        }
-      });
-    }
+    const { successUrl, cancelUrl, customerEmail } = req.body;
+    const { lineItems } = buildLineItems(req.body, true);
 
     // Utiliser {CHECKOUT_SESSION_ID} dans l'URL de success pour que Stripe le remplace automatiquement
     const baseSuccessUrl = successUrl || 'https://achzodcoaching.com/order-confirmation';
@@ -234,15 +215,7 @@ app.post('/checkout', async (req, res) => {
       if (error.message && error.message.includes('No such price')) {
         console.log('⚠️  Price ID invalide, utilisation de price_data pour tous les items');
         // Recréer lineItems avec price_data uniquement
-        lineItems = items.map(item => ({
-          price_data: {
-            currency: 'eur',
-            product_data: { name: item.name },
-            unit_amount: Math.round(item.price * 100),
-          },
-          quantity: item.quantity || 1,
-        }));
-        sessionConfig.line_items = lineItems;
+        sessionConfig.line_items = buildLineItems(req.body, false).lineItems;
         // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
         const session = await stripeUAE.checkout.sessions.create(sessionConfig);
         res.json({ url: session.url });
@@ -253,61 +226,27 @@ app.post('/checkout', async (req, res) => {
 
   } catch (error) {
     console.error('Erreur Stripe:', error);
-    res.status(500).json({ error: error.message });
+    res.status(error instanceof CheckoutValidationError ? 400 : 500).json({ error: error.message });
   }
-});
+}
+app.post(['/checkout', '/create-checkout-session'], createCheckoutSession);
 
 // Route Klarna - Utilise Stripe FR
-app.post('/checkout-klarna', async (req, res) => {
+async function createKlarnaSession(req, res) {
   if (!stripeFR) {
     console.error('❌ STRIPE_SECRET_KEY_FR non configuré !');
     return res.status(500).json({ error: 'Configuration Stripe FR manquante. Contacte le support.' });
   }
   
   try {
-    const { items, successUrl, cancelUrl, customerEmail, totalAmount, discountCode } = req.body;
-
-    if (!items || items.length === 0) {
-      return res.status(400).json({ error: 'Panier vide' });
-    }
-
-    // Klarna minimum selon Stripe: 0,50€
-    const computeItemsTotal = () =>
-      items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
-    const effectiveTotal = Number(totalAmount) > 0 ? Number(totalAmount) : computeItemsTotal();
+    const { successUrl, cancelUrl, customerEmail } = req.body;
+    const { lineItems, totalCents } = buildLineItems(req.body, false);
+    const effectiveTotal = totalCents / 100;
     const KLARNA_MIN_TOTAL_EUR = Number(process.env.KLARNA_MIN_TOTAL_EUR || 0.5);
     if (effectiveTotal > 0 && effectiveTotal < KLARNA_MIN_TOTAL_EUR) {
       return res.status(400).json({
         error: `Klarna indisponible en dessous de ${KLARNA_MIN_TOTAL_EUR}€ (total actuel: ${effectiveTotal.toFixed(2)}€). Utilise Carte/PayPal ou réduis la remise.`,
       });
-    }
-
-    let lineItems = [];
-
-    // Si un total avec réduction est fourni, l'utiliser
-    if (totalAmount && totalAmount > 0) {
-      const itemNames = items.map(i => i.name).join(' + ');
-      lineItems = [{
-        price_data: {
-          currency: 'eur',
-          product_data: { 
-            name: itemNames.substring(0, 100),
-            description: discountCode ? `Code promo: ${discountCode}` : undefined
-          },
-          unit_amount: Math.round(totalAmount * 100),
-        },
-        quantity: 1,
-      }];
-    } else {
-      // Pour Klarna (Stripe FR), toujours utiliser price_data (pas de Price IDs)
-      lineItems = items.map(item => ({
-        price_data: {
-          currency: 'eur',
-          product_data: { name: item.name },
-          unit_amount: Math.round(item.price * 100),
-        },
-        quantity: item.quantity || 1,
-      }));
     }
 
     // Utiliser {CHECKOUT_SESSION_ID} dans l'URL de success pour que Stripe le remplace automatiquement
@@ -352,9 +291,10 @@ app.post('/checkout-klarna', async (req, res) => {
 
   } catch (error) {
     console.error('Erreur Stripe FR (Klarna):', error);
-    res.status(500).json({ error: error.message });
+    res.status(error instanceof CheckoutValidationError ? 400 : 500).json({ error: error.message });
   }
-});
+}
+app.post(['/checkout-klarna', '/create-klarna-session'], createKlarnaSession);
 
 // Fonction pour trouver le lien ebook
 function findEbookLink(productName) {
@@ -671,12 +611,9 @@ app.post('/webhook', async (req, res) => {
   let event;
 
   try {
-    if (webhookSecret) {
-      event = stripeUAE.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } else {
-      // Sans webhook secret (pour les tests)
-      event = JSON.parse(req.body.toString());
-    }
+    if (!webhookSecret) throw new Error('Webhook secret UAE non configuré');
+    if (!sig) throw new Error('Signature Stripe absente');
+    event = stripeUAE.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -685,6 +622,10 @@ app.post('/webhook', async (req, res) => {
   // Traiter l'événement checkout.session.completed
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
+    if (session.payment_status !== 'paid') {
+      console.warn('Session UAE complétée mais non payée, livraison bloquée:', session.id);
+      return res.json({ received: true });
+    }
     
     console.log('Paiement réussi:', session.id);
     
@@ -756,6 +697,10 @@ app.post('/webhook-klarna', async (req, res) => {
       const fullSession = await stripeFR.checkout.sessions.retrieve(session.id, {
         expand: ['line_items', 'customer_details'],
       });
+      if (fullSession.payment_status !== 'paid') {
+        console.warn('Session FR complétée mais non payée, livraison bloquée:', session.id);
+        return res.json({ received: true });
+      }
 
       const customerEmail = fullSession.customer_details?.email || session.customer_email;
       const customerName = fullSession.customer_details?.name || '';
@@ -940,6 +885,10 @@ app.get('/download-links', async (req, res) => {
       }
     }
 
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Paiement non complété' });
+    }
+
     const ebooks = [];
     const productNames = [];
     
@@ -977,7 +926,7 @@ app.get('/', (req, res) => {
 });
 
 // Route pour créer/récupérer le webhook Stripe FR automatiquement
-app.get('/setup-webhook-fr', async (req, res) => {
+app.get('/setup-webhook-fr', requireDiagnosticAuth, async (req, res) => {
   if (!stripeFR) {
     return res.status(500).json({ error: 'STRIPE_SECRET_KEY_FR non configuré' });
   }
@@ -1039,7 +988,7 @@ app.get('/setup-webhook-fr', async (req, res) => {
 });
 
 // Diagnostic endpoint (pour vérifier la config sans exposer les secrets)
-app.get('/diagnostic', (req, res) => {
+app.get('/diagnostic', requireDiagnosticAuth, (req, res) => {
   const config = {
     email: {
       EMAIL_USER: process.env.EMAIL_USER ? '✅ ' + process.env.EMAIL_USER : '❌ NON DÉFINI',
@@ -1071,7 +1020,7 @@ app.get('/diagnostic', (req, res) => {
 });
 
 // Diag: tester l'envoi d'email (Gmail App Password)
-app.get('/test-email', async (req, res) => {
+app.get('/test-email', requireDiagnosticAuth, async (req, res) => {
   try {
     const to = req.query.to || process.env.EMAIL_USER || 'achzodyt@gmail.com';
     const info = await transporter.sendMail({
@@ -1087,7 +1036,7 @@ app.get('/test-email', async (req, res) => {
 });
 
 // Diag: lister les webhooks Stripe FR (état, URL, dernier échec)
-app.get('/list-webhook-fr', async (req, res) => {
+app.get('/list-webhook-fr', requireDiagnosticAuth, async (req, res) => {
   try {
     if (!stripeFR) return res.status(400).json({ error: 'stripeFR non initialisé' });
     const webhooks = await stripeFR.webhookEndpoints.list({ limit: 100 });
@@ -1108,7 +1057,7 @@ app.get('/list-webhook-fr', async (req, res) => {
 });
 
 // Diag: rejouer manuellement un event Stripe FR (commande non délivrée)
-app.get('/replay-event', async (req, res) => {
+app.get('/replay-event', requireDiagnosticAuth, async (req, res) => {
   try {
     if (!stripeFR) return res.status(400).json({ error: 'stripeFR non initialisé' });
     const eventId = req.query.id;
@@ -1158,7 +1107,7 @@ app.get('/replay-event', async (req, res) => {
 });
 
 // Diag: derniers events checkout.session.completed sur Stripe FR
-app.get('/recent-events-fr', async (req, res) => {
+app.get('/recent-events-fr', requireDiagnosticAuth, async (req, res) => {
   try {
     if (!stripeFR) return res.status(400).json({ error: 'stripeFR non initialisé' });
     const events = await stripeFR.events.list({

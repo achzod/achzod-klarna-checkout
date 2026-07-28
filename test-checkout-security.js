@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { buildLineItems, validateAndPriceCart } = require('./checkout-security');
+const { PRODUCTS, buildLineItems, validateAndPriceCart } = require('./checkout-security');
 
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
@@ -68,6 +68,37 @@ test('bloque les faux noms contenant partiellement un vrai nom', () => {
 
 test('bloque un code promo non validé côté serveur', () => {
   rejects({ discountCode: 'FAUX99', items: [{ name: 'Starter' }] }, /validé côté serveur/);
+});
+
+test('protège chaque produit du catalogue contre prix et total falsifiés', () => {
+  for (const product of PRODUCTS) {
+    const name = product.aliases[0];
+    const priced = validateAndPriceCart({ items: [{ name, price: 0.01 }] });
+    assert.equal(priced.totalCents, product.amount, `${product.name}: prix client ignoré`);
+    rejects({
+      totalAmount: 0.01,
+      items: [{ name, price: 0.01 }],
+    }, /prix catalogue/);
+  }
+});
+
+test('recalcule intégralement les paniers mixtes coaching et ebooks', () => {
+  const cart = validateAndPriceCart({
+    items: [
+      { name: 'Essential 4 semaines', price: 0.01 },
+      { name: 'Anabolic Code', price: 0.01 },
+      { name: 'Bioénergétique', price: 0.01 },
+    ],
+  });
+  assert.equal(cart.totalCents, 38700);
+  rejects({
+    totalAmount: 3,
+    items: [
+      { name: 'Essential 4 semaines', price: 1 },
+      { name: 'Anabolic Code', price: 1 },
+      { name: 'Bioénergétique', price: 1 },
+    ],
+  }, /prix catalogue/);
 });
 
 let failed = 0;

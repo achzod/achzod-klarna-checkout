@@ -47,6 +47,7 @@ assert.deepEqual(buildCheckoutMetadata(cart), {
   cart_subtotal_cents: '109800',
   discount_cents: '9900',
   promotion_code: 'BLOOD99',
+  client_total_ignored: 'false',
   cart_items: 'Essential 12 semaines x2',
 });
 

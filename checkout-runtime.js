@@ -102,6 +102,7 @@ function buildCheckoutMetadata(cart) {
     cart_subtotal_cents: String(cart.subtotalCents),
     discount_cents: String(cart.discountCents || 0),
     promotion_code: cart.promotionCode || 'none',
+    client_total_ignored: cart.clientTotalIgnored ? 'true' : 'false',
     cart_items: cart.items.map((item) => `${item.name} x${item.quantity}`).join(' | ').slice(0, 500),
   };
 }

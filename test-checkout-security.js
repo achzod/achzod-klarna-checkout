@@ -119,6 +119,38 @@ test('accepte une remise ApexLabs sur panier mixte avec quantités exactes', () 
   assert.equal(cart.totalCents, 107800);
 });
 
+test('répare le panier exact Elite 4 + Essential 8 malgré le mauvais total Webflow', () => {
+  const cart = validateAndPriceCart({
+    totalAmount: 399,
+    items: [
+      { name: 'COACHING ELITE € 399,00 EUR 4 semaines - ELITE', quantity: 1 },
+      { name: 'COACHING ESSENTIAL € 399,00 EUR 8 semaines Essential', quantity: 1 },
+    ],
+  });
+  assert.equal(cart.subtotalCents, 79800);
+  assert.equal(cart.discountCents, 0);
+  assert.equal(cart.totalCents, 79800);
+  assert.equal(cart.promotionCode, null);
+  assert.equal(cart.clientTotalIgnored, true);
+  assert.deepEqual(cart.items.map((item) => item.name), ['Elite 4 semaines', 'Essential 8 semaines']);
+});
+
+test('ne répare jamais un faux total avec code, ebook ou quantité explicite', () => {
+  rejects({
+    discountCode: 'BLOOD99',
+    totalAmount: 399,
+    items: [{ name: 'Elite 4 semaines' }, { name: 'Essential 8 semaines' }],
+  }, /code promo/);
+  rejects({
+    totalAmount: 398,
+    items: [{ name: 'Elite 4 semaines' }, { name: 'Anabolic Code' }],
+  }, /prix catalogue/);
+  rejects({
+    totalAmount: 399,
+    items: [{ name: 'Elite 4 semaines', quantity: 2 }, { name: 'Essential 8 semaines' }],
+  }, /prix catalogue/);
+});
+
 test('applique FAQ50 uniquement aux ebooks', () => {
   const cart = validateAndPriceCart({
     discountCode: 'FAQ50',

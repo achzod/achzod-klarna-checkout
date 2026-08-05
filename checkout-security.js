@@ -160,6 +160,7 @@ function validateAndPriceCart(body) {
   }
 
   let promotion;
+  let clientTotalIgnored = false;
   try {
     promotion = resolvePromotion(effectiveItems, subtotalCents, clientTotalCents, requestedCode);
   } catch (error) {
@@ -169,10 +170,25 @@ function validateAndPriceCart(body) {
     const recovered = clientTotalCents !== null && effectiveItems.length === 1
       ? recoverSingleItemCart(effectiveItems[0], clientTotalCents, requestedCode)
       : null;
-    if (!recovered) throw error;
-    effectiveItems = recovered.items;
-    subtotalCents = recovered.subtotalCents;
-    promotion = recovered;
+    if (recovered) {
+      effectiveItems = recovered.items;
+      subtotalCents = recovered.subtotalCents;
+      promotion = recovered;
+    } else {
+      // Les anciens scripts Webflow peuvent lire le mauvais noeud de total sur
+      // un panier composé de plusieurs coachings. Les lignes produit restent
+      // fiables et sont toujours recalculées avec le catalogue serveur. Dans ce
+      // cas précis, ignorer le total erroné ne permet jamais de réduire le prix:
+      // Stripe reçoit le prix catalogue complet. Un code explicitement envoyé,
+      // un ebook ou une quantité autre que 1 restent strictement bloqués.
+      const safeLegacyMixedCoachingCart = !requestedCode
+        && clientTotalCents !== null
+        && effectiveItems.length > 1
+        && effectiveItems.every((item) => item.kind === 'coaching' && item.quantity === 1);
+      if (!safeLegacyMixedCoachingCart) throw error;
+      promotion = { promotionCode: null, discountCents: 0 };
+      clientTotalIgnored = true;
+    }
   }
 
   const totalCents = subtotalCents - promotion.discountCents;
@@ -185,6 +201,7 @@ function validateAndPriceCart(body) {
     totalCents,
     discountCents: promotion.discountCents,
     promotionCode: promotion.promotionCode,
+    clientTotalIgnored,
   };
 }
 

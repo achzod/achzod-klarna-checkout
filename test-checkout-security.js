@@ -66,6 +66,14 @@ test('bloque les faux noms contenant partiellement un vrai nom', () => {
   rejects({ items: [{ name: 'Anabolic Code piraté', price: 0.01 }] }, /Produit inconnu/);
 });
 
+test('accepte les libellés checkout Webflow enrichis pour Klarna', () => {
+  const cart = validateAndPriceCart({
+    items: [{ name: 'COACHING ELITE € 649,00 EUR 8 semaines - ELITE', price: 649 }],
+  });
+  assert.equal(cart.totalCents, 64900);
+  assert.equal(cart.items[0].name, 'Elite 8 semaines');
+});
+
 test('bloque un code promo non validé côté serveur', () => {
   rejects({ discountCode: 'FAUX99', items: [{ name: 'Starter' }] }, /validé côté serveur/);
 });

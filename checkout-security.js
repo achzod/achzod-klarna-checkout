@@ -10,18 +10,27 @@ function normalizeProductName(value) {
     .replace(/\s+/g, ' ');
 }
 
+function normalizeCheckoutLabel(value) {
+  return normalizeProductName(value)
+    // Supprime les montants injectés par le checkout Webflow, ex: "649 00 eur"
+    .replace(/\b\d{2,4}\s\d{2}\s(?:eur|usd|aed)\b/g, ' ')
+    .replace(/\b(?:eur|usd|aed)\b/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 const PRODUCTS = [
   { name: 'Coaching sans suivi', amount: 9900, priceId: 'price_1SdvMiBTm0rdlVFq1quX3O14', aliases: ['coaching sans suivi'] },
   { name: 'Starter', amount: 14900, priceId: 'price_1SdvMiBTm0rdlVFqqNzpgaPc', aliases: ['starter'] },
-  { name: 'Essential 4 semaines', amount: 24900, priceId: 'price_1SdvMiBTm0rdlVFqLfsmZktn', aliases: ['essential 4 semaines', '4 semaines essential'] },
-  { name: 'Essential 8 semaines', amount: 39900, priceId: 'price_1SdvMhBTm0rdlVFqH5DLanUx', aliases: ['essential 8 semaines', '8 semaines essential'] },
-  { name: 'Essential 12 semaines', amount: 54900, priceId: 'price_1SdvMhBTm0rdlVFqwk0q6GSp', aliases: ['essential 12 semaines', '12 semaines essential'] },
-  { name: 'Elite 4 semaines', amount: 39900, priceId: 'price_1SdvMgBTm0rdlVFqzHfzhM8K', aliases: ['elite 4 semaines', '4 semaines elite'] },
-  { name: 'Elite 8 semaines', amount: 64900, priceId: 'price_1SdvMgBTm0rdlVFqN0ApjtgB', aliases: ['elite 8 semaines', '8 semaines elite'] },
-  { name: 'Elite 12 semaines', amount: 89900, priceId: 'price_1SdvMgBTm0rdlVFqstDCjSEg', aliases: ['elite 12 semaines', '12 semaines elite'] },
-  { name: 'Private Lab 4 semaines', amount: 49900, priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', aliases: ['private lab 4 semaines', '4 semaines private lab', 'achzod private lab 4 semaines'] },
-  { name: 'Private Lab 8 semaines', amount: 79900, priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', aliases: ['private lab 8 semaines', '8 semaines private lab', 'achzod private lab 8 semaines'] },
-  { name: 'Private Lab 12 semaines', amount: 119900, priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', aliases: ['private lab 12 semaines', '12 semaines private lab', 'achzod private lab 12 semaines'] },
+  { name: 'Essential 4 semaines', amount: 24900, priceId: 'price_1SdvMiBTm0rdlVFqLfsmZktn', aliases: ['essential 4 semaines', '4 semaines essential', 'coaching essential 4 semaines', 'coaching essential 4 semaines essential'] },
+  { name: 'Essential 8 semaines', amount: 39900, priceId: 'price_1SdvMhBTm0rdlVFqH5DLanUx', aliases: ['essential 8 semaines', '8 semaines essential', 'coaching essential 8 semaines', 'coaching essential 8 semaines essential'] },
+  { name: 'Essential 12 semaines', amount: 54900, priceId: 'price_1SdvMhBTm0rdlVFqwk0q6GSp', aliases: ['essential 12 semaines', '12 semaines essential', 'coaching essential 12 semaines', 'coaching essential 12 semaines essential'] },
+  { name: 'Elite 4 semaines', amount: 39900, priceId: 'price_1SdvMgBTm0rdlVFqzHfzhM8K', aliases: ['elite 4 semaines', '4 semaines elite', 'coaching elite 4 semaines', 'coaching elite 4 semaines elite'] },
+  { name: 'Elite 8 semaines', amount: 64900, priceId: 'price_1SdvMgBTm0rdlVFqN0ApjtgB', aliases: ['elite 8 semaines', '8 semaines elite', 'coaching elite 8 semaines', 'coaching elite 8 semaines elite'] },
+  { name: 'Elite 12 semaines', amount: 89900, priceId: 'price_1SdvMgBTm0rdlVFqstDCjSEg', aliases: ['elite 12 semaines', '12 semaines elite', 'coaching elite 12 semaines', 'coaching elite 12 semaines elite'] },
+  { name: 'Private Lab 4 semaines', amount: 49900, priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', aliases: ['private lab 4 semaines', '4 semaines private lab', 'achzod private lab 4 semaines', 'coaching private lab 4 semaines', 'coaching private lab 4 semaines private lab'] },
+  { name: 'Private Lab 8 semaines', amount: 79900, priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', aliases: ['private lab 8 semaines', '8 semaines private lab', 'achzod private lab 8 semaines', 'coaching private lab 8 semaines', 'coaching private lab 8 semaines private lab'] },
+  { name: 'Private Lab 12 semaines', amount: 119900, priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', aliases: ['private lab 12 semaines', '12 semaines private lab', 'achzod private lab 12 semaines', 'coaching private lab 12 semaines', 'coaching private lab 12 semaines private lab'] },
   { name: 'Anabolic Code', amount: 7900, priceId: 'price_1SdvMeBTm0rdlVFqZEmcaDNm', aliases: ['anabolic code'] },
   { name: 'Libérer son potentiel génétique', amount: 4900, priceId: 'price_1SdvMeBTm0rdlVFqTi8xNboT', aliases: ['liberer son potentiel', 'liberer son potentiel genetique', 'liberer son potentiel genetique en 10 semaines'] },
   { name: '4 semaines pour être SHRED', amount: 4900, priceId: 'price_1SdvMdBTm0rdlVFqHi638498', aliases: ['4 semaines pour etre shred', '4 semaines pour etre shred perte de gras et prise de muscles', '4 semaines shred'] },
@@ -57,7 +66,8 @@ function validateAndPriceCart(body) {
     if (!item || typeof item.name !== 'string') {
       throw new CheckoutValidationError('Produit invalide');
     }
-    const product = PRODUCT_BY_ALIAS.get(normalizeProductName(item.name));
+    const product = PRODUCT_BY_ALIAS.get(normalizeProductName(item.name))
+      || PRODUCT_BY_ALIAS.get(normalizeCheckoutLabel(item.name));
     if (!product) {
       throw new CheckoutValidationError(`Produit inconnu: ${String(item.name).slice(0, 80)}`);
     }

@@ -1,0 +1,39 @@
+<!--
+  ACHZOD KLARNA CHECKOUT — snippet Webflow
+  --------------------------------------------------------------
+  Colle CE CODE dans Webflow → Project Settings → Custom Code →
+  Footer Code (avant </body>). Il remplace tout l'ancien bloc
+  Klarna + backup panier (cookie achzod_cart_backup, IDs
+  ac-klarna-fixed / ac-klarna-btn / klarna-fixed-btn, etc.).
+
+  Le script hébergé sur Render est la source de vérité, plus rien
+  à toucher dans Webflow pour les futures mises à jour.
+-->
+<script>
+  // Purge immédiate de l'ancien système de backup panier qui accumulait les
+  // produits entre les tentatives Klarna. Le vrai panier Webflow (DOM) est
+  // désormais la seule source de vérité.
+  (function () {
+    try {
+      ['achzod_cart_backup', 'achzod_cart_timestamp', 'achzod_code_version'].forEach(function (key) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
+    } catch (_) {}
+    try {
+      var expired = 'Thu, 01 Jan 1970 00:00:00 UTC';
+      document.cookie = 'achzod_cart=;expires=' + expired + ';path=/;domain=.achzodcoaching.com';
+      document.cookie = 'achzod_cart=;expires=' + expired + ';path=/';
+    } catch (_) {}
+    ['klarna-fixed-btn', 'ac-klarna-fixed', 'ac-klarna-btn'].forEach(function (id) {
+      var node = document.getElementById(id);
+      if (node) node.remove();
+    });
+    // Force le rechargement quand la page revient du cache navigateur (retour
+    // depuis Stripe/Klarna via le bouton "Précédent") pour lire le vrai panier.
+    window.addEventListener('pageshow', function (event) {
+      if (event.persisted) window.location.reload();
+    });
+  })();
+</script>
+<script src="https://achzod-klarna-checkout.onrender.com/webflow-klarna.js" defer></script>

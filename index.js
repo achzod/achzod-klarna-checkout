@@ -120,6 +120,15 @@ app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use('/webhook-klarna', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '64kb' }));
 
+// Sert le script Klarna à embarquer dans Webflow (source de vérité unique).
+// Update le fichier ici puis push, tout le site prend la nouvelle version.
+app.get('/webflow-klarna.js', (req, res) => {
+  const path = require('node:path');
+  res.set('Cache-Control', 'public, max-age=60');
+  res.type('application/javascript; charset=utf-8');
+  res.sendFile(path.join(__dirname, 'webflow-klarna.js'));
+});
+
 const checkoutRateBuckets = new Map();
 function checkoutRateLimit(req, res, next) {
   const now = Date.now();

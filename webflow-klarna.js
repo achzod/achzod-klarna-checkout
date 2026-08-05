@@ -6,7 +6,32 @@
   var API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout-klarna';
   var BUTTON_ID = 'achzod-klarna-checkout';
   var LEGACY_IDS = ['klarna-fixed-btn', 'ac-klarna-fixed', 'ac-klarna-btn'];
+  var LEGACY_BACKUP_KEYS = ['achzod_cart_backup', 'achzod_cart_timestamp'];
+  var LEGACY_BACKUP_COOKIE = 'achzod_cart';
   var PROMO_STORAGE_KEY = 'achzod_klarna_promo';
+  var CHECKOUT_ITEM_SELECTOR = '.w-commerce-commercecheckoutorderitem';
+  var CHECKOUT_TOTAL_SELECTOR = '.w-commerce-commercecheckoutsummarytotal';
+  var DOM_READY_TIMEOUT_MS = 4000;
+  var DOM_READY_INTERVAL_MS = 120;
+
+  // Purge tout état hérité du vieux système de backup pour éviter que d'anciens
+  // paniers accumulés côté localStorage/cookie ne remontent dans Klarna.
+  function purgeLegacyBackups() {
+    try {
+      LEGACY_BACKUP_KEYS.forEach(function (key) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
+    } catch (_) {}
+    try {
+      document.cookie = LEGACY_BACKUP_COOKIE + '=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;domain=.achzodcoaching.com';
+      document.cookie = LEGACY_BACKUP_COOKIE + '=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/';
+    } catch (_) {}
+    try {
+      window.getAchzodCartBackup = function () { return []; };
+      window.clearAchzodCart = function () {};
+    } catch (_) {}
+  }
 
   function parseEuro(value) {
     var text = String(value || '').replace(/\u00a0/g, ' ');
@@ -32,9 +57,12 @@
     return Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= 10 ? quantity : 1;
   }
 
+  // Source de vérité : le DOM du checkout Webflow. On ne s'appuie plus sur
+  // aucun backup localStorage/cookie — c'était la source du bug où les produits
+  // s'accumulaient au retour depuis Klarna.
   function readDomItems() {
     return Array.prototype.map.call(
-      document.querySelectorAll('.w-commerce-commercecheckoutorderitem'),
+      document.querySelectorAll(CHECKOUT_ITEM_SELECTOR),
       function (row) {
         var nameNode = row.querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
         var priceNode = row.querySelector('.w-commerce-commercecheckoutorderitemprice');
@@ -45,20 +73,17 @@
     ).filter(Boolean);
   }
 
-  function readBackupItems() {
-    try {
-      var raw = localStorage.getItem('achzod_cart_backup');
-      var parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map(function (item) {
-        return {
-          name: String(item.name || '').slice(0, 120),
-          price: Number(item.price),
-          quantity: Number(item.quantity) || 1,
-        };
-      }).filter(function (item) { return item.name && item.price > 0; }) : [];
-    } catch (_) {
-      return [];
-    }
+  function waitForDomItems() {
+    return new Promise(function (resolve) {
+      var startedAt = Date.now();
+      function poll() {
+        var items = readDomItems();
+        if (items.length > 0) return resolve(items);
+        if (Date.now() - startedAt >= DOM_READY_TIMEOUT_MS) return resolve([]);
+        window.setTimeout(poll, DOM_READY_INTERVAL_MS);
+      }
+      poll();
+    });
   }
 
   function normalizePromotionCode(value) {
@@ -98,10 +123,9 @@
     if (button) button.addEventListener('click', rememberPromotionCode, true);
   }
 
-  function readPayload() {
-    var items = readDomItems();
-    if (!items.length) items = readBackupItems();
-    var totalNode = document.querySelector('.w-commerce-commercecheckoutsummarytotal');
+  async function buildPayload() {
+    var items = await waitForDomItems();
+    var totalNode = document.querySelector(CHECKOUT_TOTAL_SELECTOR);
     var totalAmount = parseEuro(totalNode ? totalNode.textContent : '');
     var emailNode = document.querySelector('input[type="email"]');
     var payload = {
@@ -135,8 +159,21 @@
     });
   }
 
+  // Recharge complète du checkout Webflow quand la page revient du cache
+  // (bouton retour navigateur, retour depuis Stripe/Klarna). Force la lecture
+  // du panier réel côté serveur Webflow au lieu du snapshot mis en cache.
+  function setupBFCacheReload() {
+    window.addEventListener('pageshow', function (event) {
+      if (event.persisted) {
+        window.location.reload();
+      }
+    });
+  }
+
   function mount() {
+    purgeLegacyBackups();
     removeLegacyButtons();
+    setupBFCacheReload();
     if (document.getElementById(BUTTON_ID)) return;
     trackPromotionForm();
 
@@ -151,7 +188,12 @@
     var errorBox = wrap.querySelector('[role="alert"]');
     button.addEventListener('click', async function () {
       if (button.disabled) return;
-      var payload = readPayload();
+      var payload;
+      try {
+        payload = await buildPayload();
+      } catch (_) {
+        payload = { items: [] };
+      }
       if (!payload.items.length) {
         errorBox.textContent = 'Ton panier semble vide. Recharge la page puis réessaie.';
         errorBox.style.display = 'block';

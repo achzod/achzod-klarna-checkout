@@ -6,6 +6,7 @@ const {
   buildCheckoutUrls,
   buildIdempotencyKey,
   getStripePromotionId,
+  resolveStripePromotionCode,
   validateCustomerEmail,
 } = require('./checkout-runtime');
 
@@ -51,4 +52,36 @@ assert.deepEqual(buildCheckoutMetadata(cart), {
   cart_items: 'Essential 12 semaines x2',
 });
 
-console.log('✓ sécurité runtime checkout validée');
+async function testDynamicStripePromotions() {
+  const calls = [];
+  const stripe = {
+    promotionCodes: {
+      async list(params) {
+        calls.push(params);
+        return {
+          data: [{
+            id: 'promo_dynamic123',
+            code: 'Vip-17',
+            active: true,
+            coupon: { valid: true, percent_off: 17, amount_off: null, currency: null },
+          }],
+        };
+      },
+    },
+  };
+  const resolved = await resolveStripePromotionCode(stripe, ' vip-17 ');
+  assert.deepEqual(calls, [{ code: 'VIP-17', active: true, limit: 10 }]);
+  assert.equal(resolved.id, 'promo_dynamic123');
+  assert.deepEqual(resolved.promotion, { code: 'VIP-17', percentOff: 17 });
+
+  stripe.promotionCodes.list = async () => ({ data: [] });
+  await assert.rejects(() => resolveStripePromotionCode(stripe, 'EXPIRE'), /expiré ou inactif/);
+  assert.equal(await resolveStripePromotionCode(stripe, ''), null);
+}
+
+testDynamicStripePromotions()
+  .then(() => console.log('✓ sécurité runtime checkout validée'))
+  .catch((error) => {
+    console.error(error.stack);
+    process.exitCode = 1;
+  });

@@ -61,12 +61,14 @@ class CheckoutValidationError extends Error {
 }
 
 function normalizePromotionCode(value) {
-  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 64);
 }
 
 function promotionDiscountCents(promotion, items, subtotalCents) {
   if (!promotion) return 0;
-  const eligible = items.filter((item) => item.kind === promotion.eligibleKind);
+  const eligible = promotion.eligibleKind
+    ? items.filter((item) => item.kind === promotion.eligibleKind)
+    : items;
   if (eligible.length === 0) return null;
   if (promotion.exclusiveKind && eligible.length !== items.length) return null;
   if (promotion.amountOff) return Math.min(promotion.amountOff, subtotalCents);
@@ -74,9 +76,9 @@ function promotionDiscountCents(promotion, items, subtotalCents) {
   return null;
 }
 
-function resolvePromotion(items, subtotalCents, clientTotalCents, requestedCode) {
+function resolvePromotion(items, subtotalCents, clientTotalCents, requestedCode, promotions = PROMOTIONS) {
   if (requestedCode) {
-    const promotion = PROMOTIONS[requestedCode];
+    const promotion = promotions[requestedCode];
     if (!promotion) throw new CheckoutValidationError('Code promo inconnu');
     const discountCents = promotionDiscountCents(promotion, items, subtotalCents);
     if (!Number.isSafeInteger(discountCents) || discountCents <= 0) {
@@ -92,7 +94,7 @@ function resolvePromotion(items, subtotalCents, clientTotalCents, requestedCode)
     return { promotionCode: null, discountCents: 0 };
   }
 
-  const matches = Object.values(PROMOTIONS).flatMap((promotion) => {
+  const matches = Object.values(promotions).flatMap((promotion) => {
     const discountCents = promotionDiscountCents(promotion, items, subtotalCents);
     return Number.isSafeInteger(discountCents) && subtotalCents - discountCents === clientTotalCents
       ? [{ promotionCode: promotion.code, discountCents }]
@@ -143,10 +145,10 @@ function possibleSubtotalsForPromotion(clientTotalCents, promotion) {
   return [];
 }
 
-function recoverCartQuantities(items, clientTotalCents, requestedCode) {
+function recoverCartQuantities(items, clientTotalCents, requestedCode, promotions = PROMOTIONS) {
   const promotionCandidates = requestedCode
-    ? [PROMOTIONS[requestedCode]].filter(Boolean)
-    : [null, ...Object.values(PROMOTIONS)];
+    ? [promotions[requestedCode]].filter(Boolean)
+    : [null, ...Object.values(promotions)];
   const matches = [];
   const fingerprints = new Set();
 
@@ -159,7 +161,7 @@ function recoverCartQuantities(items, clientTotalCents, requestedCode) {
         const subtotalCents = candidateItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
         try {
           const code = promotionCandidate ? promotionCandidate.code : '';
-          const promotion = resolvePromotion(candidateItems, subtotalCents, clientTotalCents, code);
+          const promotion = resolvePromotion(candidateItems, subtotalCents, clientTotalCents, code, promotions);
           const fingerprint = `${candidateItems.map((item) => item.quantity).join(',')}|${promotion.promotionCode || ''}`;
           if (!fingerprints.has(fingerprint)) {
             fingerprints.add(fingerprint);
@@ -175,7 +177,7 @@ function recoverCartQuantities(items, clientTotalCents, requestedCode) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-function validateAndPriceCart(body) {
+function validateAndPriceCart(body, promotions = PROMOTIONS) {
   if (!body || !Array.isArray(body.items) || body.items.length === 0) {
     throw new CheckoutValidationError('Panier vide');
   }
@@ -218,14 +220,14 @@ function validateAndPriceCart(body) {
   let promotion;
   let clientTotalIgnored = false;
   try {
-    promotion = resolvePromotion(effectiveItems, subtotalCents, clientTotalCents, requestedCode);
+    promotion = resolvePromotion(effectiveItems, subtotalCents, clientTotalCents, requestedCode, promotions);
   } catch (error) {
     // Les anciens boutons Webflow peuvent envoyer des quantités fausses depuis
     // leur cookie de secours. On reconstruit alors toutes les lignes à partir
     // du total affiché, des prix catalogue et des seules promotions autorisées.
     // La réparation n’est acceptée que si une seule combinaison est possible.
     const recovered = clientTotalCents !== null
-      ? recoverCartQuantities(effectiveItems, clientTotalCents, requestedCode)
+      ? recoverCartQuantities(effectiveItems, clientTotalCents, requestedCode, promotions)
       : null;
     if (recovered) {
       effectiveItems = recovered.items;
@@ -260,8 +262,8 @@ function validateAndPriceCart(body) {
   };
 }
 
-function buildLineItems(body, useStripePriceIds) {
-  const cart = validateAndPriceCart(body);
+function buildLineItems(body, useStripePriceIds, promotions = PROMOTIONS) {
+  const cart = validateAndPriceCart(body, promotions);
   return {
     ...cart,
     lineItems: cart.items.map((item) => useStripePriceIds

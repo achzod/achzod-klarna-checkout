@@ -62,7 +62,7 @@
   }
 
   function normalizePromotionCode(value) {
-    return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+    return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 64);
   }
 
   function rememberPromotionCode() {
@@ -74,7 +74,15 @@
     } catch (_) {}
   }
 
+  function readAppliedPromotionCode() {
+    var text = String(document.body ? document.body.innerText : '');
+    var match = text.match(/discount\s*\(\s*([a-z0-9_-]{1,64})\s*\)/i);
+    return normalizePromotionCode(match ? match[1] : '');
+  }
+
   function readPromotionCode() {
+    var appliedCode = readAppliedPromotionCode();
+    if (appliedCode) return appliedCode;
     try {
       return normalizePromotionCode(sessionStorage.getItem(PROMO_STORAGE_KEY));
     } catch (_) {
@@ -83,7 +91,6 @@
   }
 
   function trackPromotionForm() {
-    try { sessionStorage.removeItem(PROMO_STORAGE_KEY); } catch (_) {}
     var form = document.querySelector('[data-node-type="commerce-checkout-discount-form"]');
     if (!form) return;
     form.addEventListener('submit', rememberPromotionCode, true);

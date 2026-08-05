@@ -2,13 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
-const { CheckoutValidationError, PRODUCTS, buildLineItems } = require('./checkout-security');
+const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems } = require('./checkout-security');
 const {
   CheckoutRequestError,
   buildCheckoutMetadata,
   buildCheckoutUrls,
   buildIdempotencyKey,
   getStripePromotionId,
+  normalizePromotionCode,
+  resolveStripePromotionCode,
   validateCustomerEmail,
 } = require('./checkout-runtime');
 
@@ -277,7 +279,15 @@ async function createKlarnaSession(req, res) {
   
   try {
     const { successUrl, cancelUrl, customerEmail } = req.body;
-    const cart = buildLineItems(req.body, false);
+    const requestedPromotionCode = normalizePromotionCode(req.body.discountCode || req.body.promoCode);
+    const resolvedPromotion = await resolveStripePromotionCode(stripeFR, requestedPromotionCode);
+    const promotions = resolvedPromotion
+      ? {
+          [resolvedPromotion.promotion.code]: PROMOTIONS[resolvedPromotion.promotion.code]
+            || resolvedPromotion.promotion,
+        }
+      : undefined;
+    const cart = buildLineItems(req.body, false, promotions);
     const email = validateCustomerEmail(customerEmail);
     const urls = buildCheckoutUrls(successUrl, cancelUrl);
     const effectiveTotal = cart.totalCents / 100;
@@ -309,7 +319,9 @@ async function createKlarnaSession(req, res) {
     }
 
     if (cart.promotionCode) {
-      sessionConfig.discounts = [{ promotion_code: getStripePromotionId(cart.promotionCode) }];
+      sessionConfig.discounts = [{
+        promotion_code: resolvedPromotion?.id || getStripePromotionId(cart.promotionCode),
+      }];
     }
 
     // Vérifier que stripeFR est bien initialisé

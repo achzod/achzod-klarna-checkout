@@ -7,14 +7,47 @@ const ALLOWED_RETURN_ORIGINS = new Set([
   'https://www.achzodcoaching.com',
 ]);
 
-const PROMOTION_CODES = new Set(['BIOSCAN59', 'ULTIMATE79', 'BLOOD99', 'FAQ50']);
-
 class CheckoutRequestError extends Error {
   constructor(message) {
     super(message);
     this.name = 'CheckoutRequestError';
     this.statusCode = 400;
   }
+}
+
+function normalizePromotionCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 64);
+}
+
+async function resolveStripePromotionCode(stripe, value) {
+  const code = normalizePromotionCode(value);
+  if (!code) return null;
+  const result = await stripe.promotionCodes.list({ code, active: true, limit: 10 });
+  const promotionCode = result.data.find((candidate) => (
+    normalizePromotionCode(candidate.code) === code
+    && candidate.active
+    && candidate.coupon
+    && candidate.coupon.valid
+  ));
+  if (!promotionCode) {
+    throw new CheckoutRequestError('Code promo inconnu, expiré ou inactif');
+  }
+
+  const coupon = promotionCode.coupon;
+  const amountOff = coupon.currency_options?.eur?.amount_off
+    ?? (String(coupon.currency || '').toLowerCase() === 'eur' ? coupon.amount_off : null);
+  const percentOff = coupon.percent_off;
+  if (!Number.isSafeInteger(amountOff) && !(Number.isFinite(percentOff) && percentOff > 0 && percentOff <= 100)) {
+    throw new CheckoutRequestError('Ce code promo ne peut pas être utilisé pour un paiement en euros');
+  }
+
+  return {
+    id: promotionCode.id,
+    promotion: Object.freeze({
+      code,
+      ...(Number.isSafeInteger(amountOff) ? { amountOff } : { percentOff }),
+    }),
+  };
 }
 
 function validateCustomerEmail(value) {
@@ -84,9 +117,9 @@ function buildIdempotencyKey(req, cart, customerEmail) {
 function getStripePromotionId(promotionCode, env = process.env, account = 'FR') {
   if (!promotionCode) return null;
   const normalizedAccount = String(account || '').toUpperCase();
-  const envKey = PROMOTION_CODES.has(promotionCode)
-    ? `STRIPE_${normalizedAccount}_PROMO_${promotionCode}`
-    : '';
+  const normalizedCode = normalizePromotionCode(promotionCode);
+  const envKeyCode = normalizedCode.replace(/[^A-Z0-9]/g, '_');
+  const envKey = normalizedCode ? `STRIPE_${normalizedAccount}_PROMO_${envKeyCode}` : '';
   const promotionId = envKey ? String(env[envKey] || '').trim() : '';
   if (!promotionId || !/^promo_[a-zA-Z0-9]+$/.test(promotionId)) {
     throw new Error(`Promotion Stripe ${normalizedAccount} non configurée pour ${promotionCode}`);
@@ -113,5 +146,7 @@ module.exports = {
   buildCheckoutUrls,
   buildIdempotencyKey,
   getStripePromotionId,
+  normalizePromotionCode,
+  resolveStripePromotionCode,
   validateCustomerEmail,
 };

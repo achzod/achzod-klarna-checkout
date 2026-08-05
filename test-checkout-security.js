@@ -228,6 +228,37 @@ test('applique FAQ50 uniquement aux ebooks', () => {
   rejects({ discountCode: 'FAQ50', items: [{ name: 'Essential 4 semaines' }] }, /ne s’applique pas/);
 });
 
+test('applique un code Stripe dynamique à tout panier et toute quantité', () => {
+  const promotions = {
+    VIP17: { code: 'VIP17', percentOff: 17 },
+    CLIENT123: { code: 'CLIENT123', amountOff: 12300 },
+  };
+  for (const product of PRODUCTS) {
+    for (let quantity = 1; quantity <= 10; quantity += 1) {
+      const subtotalCents = product.amount * quantity;
+      const percentDiscount = Math.round(subtotalCents * 17 / 100);
+      const percentCart = validateAndPriceCart({
+        discountCode: 'vip17',
+        totalAmount: (subtotalCents - percentDiscount) / 100,
+        items: [{ name: product.aliases[0], quantity }],
+      }, promotions);
+      assert.equal(percentCart.totalCents, subtotalCents - percentDiscount);
+      assert.equal(percentCart.promotionCode, 'VIP17');
+
+      const amountDiscount = Math.min(12300, subtotalCents);
+      if (amountDiscount < subtotalCents) {
+        const amountCart = validateAndPriceCart({
+          discountCode: 'client123',
+          totalAmount: (subtotalCents - amountDiscount) / 100,
+          items: [{ name: product.aliases[0], quantity }],
+        }, promotions);
+        assert.equal(amountCart.totalCents, subtotalCents - amountDiscount);
+        assert.equal(amountCart.promotionCode, 'CLIENT123');
+      }
+    }
+  }
+});
+
 test('bloque les remises manipulées, les codes inconnus et Starter supprimé', () => {
   rejects({ totalAmount: 998, items: [{ name: 'Essential 12 semaines', quantity: 1 }] }, /code promo autorisé/);
   rejects({ discountCode: 'FAUX99', items: [{ name: 'Essential 12 semaines' }] }, /Code promo inconnu/);

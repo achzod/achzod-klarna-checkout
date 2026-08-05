@@ -8,11 +8,28 @@ const {
   buildCheckoutMetadata,
   buildCheckoutUrls,
   buildIdempotencyKey,
-  getStripePromotionId,
-  normalizePromotionCode,
-  resolveStripePromotionCode,
   validateCustomerEmail,
 } = require('./checkout-runtime');
+
+// Crée un coupon Stripe à usage unique pour la remise client (n'importe quel
+// code promo/total remisé) puis retourne l'id du coupon prêt à être attaché à
+// la session Checkout via `discounts: [{ coupon }]`.
+async function createDynamicDiscountCoupon(stripe, cart) {
+  if (!cart.discountCents || cart.discountCents <= 0) return null;
+  const name = (cart.promotionCode || 'REMISE').slice(0, 40);
+  const coupon = await stripe.coupons.create({
+    amount_off: cart.discountCents,
+    currency: 'eur',
+    duration: 'once',
+    name: `Code ${name}`,
+    max_redemptions: 1,
+    metadata: {
+      applied_via: 'webflow_client',
+      promo_code: cart.promotionCode || 'inconnu',
+    },
+  });
+  return coupon.id;
+}
 
 const app = express();
 app.set('trust proxy', 1);
@@ -207,7 +224,9 @@ function findPriceId(productName, amount) {
 async function createCheckoutSession(req, res) {
   try {
     const { successUrl, cancelUrl, customerEmail } = req.body;
-    const cart = buildLineItems(req.body, true);
+    // On utilise price_data (pas les Price IDs catalogue) pour que Stripe
+    // reçoive les prix affichés côté Webflow, même s'ils diffèrent du catalogue.
+    const cart = buildLineItems(req.body, false);
     const email = validateCustomerEmail(customerEmail);
     const urls = buildCheckoutUrls(successUrl, cancelUrl);
     
@@ -234,10 +253,8 @@ async function createCheckoutSession(req, res) {
 
     // Si erreur "No such price", recréer avec price_data uniquement
     try {
-      // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
-      if (cart.promotionCode) {
-        sessionConfig.discounts = [{ promotion_code: getStripePromotionId(cart.promotionCode, process.env, 'UAE') }];
-      }
+      const couponIdUAE = await createDynamicDiscountCoupon(stripeUAE, cart);
+      if (couponIdUAE) sessionConfig.discounts = [{ coupon: couponIdUAE }];
       const session = await stripeUAE.checkout.sessions.create(
         sessionConfig,
         { idempotencyKey: buildIdempotencyKey(req, cart, email) },
@@ -246,10 +263,8 @@ async function createCheckoutSession(req, res) {
     } catch (error) {
       if (error.message && error.message.includes('No such price')) {
         console.log('⚠️  Price ID invalide, utilisation de price_data pour tous les items');
-        // Recréer lineItems avec price_data uniquement
         const fallbackCart = buildLineItems(req.body, false);
         sessionConfig.line_items = fallbackCart.lineItems;
-        // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
         const session = await stripeUAE.checkout.sessions.create(
           sessionConfig,
           { idempotencyKey: `${buildIdempotencyKey(req, fallbackCart, email)}_inline` },
@@ -279,15 +294,7 @@ async function createKlarnaSession(req, res) {
   
   try {
     const { successUrl, cancelUrl, customerEmail } = req.body;
-    const requestedPromotionCode = normalizePromotionCode(req.body.discountCode || req.body.promoCode);
-    const resolvedPromotion = await resolveStripePromotionCode(stripeFR, requestedPromotionCode);
-    const promotions = resolvedPromotion
-      ? {
-          [resolvedPromotion.promotion.code]: PROMOTIONS[resolvedPromotion.promotion.code]
-            || resolvedPromotion.promotion,
-        }
-      : undefined;
-    const cart = buildLineItems(req.body, false, promotions);
+    const cart = buildLineItems(req.body, false);
     const email = validateCustomerEmail(customerEmail);
     const urls = buildCheckoutUrls(successUrl, cancelUrl);
     const effectiveTotal = cart.totalCents / 100;
@@ -318,11 +325,8 @@ async function createKlarnaSession(req, res) {
       sessionConfig.customer_email = email;
     }
 
-    if (cart.promotionCode) {
-      sessionConfig.discounts = [{
-        promotion_code: resolvedPromotion?.id || getStripePromotionId(cart.promotionCode),
-      }];
-    }
+    const klarnaCouponId = await createDynamicDiscountCoupon(stripeFR, cart);
+    if (klarnaCouponId) sessionConfig.discounts = [{ coupon: klarnaCouponId }];
 
     // Vérifier que stripeFR est bien initialisé
     if (!stripeFR || typeof stripeFR.checkout === 'undefined') {

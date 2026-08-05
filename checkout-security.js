@@ -58,7 +58,8 @@ function resolveProduct(value) {
   // encodé dans descriptionwrapper. On identifie alors la formule à partir
   // des marqueurs stables (gamme + durée), sans utiliser le reste du texte.
   const label = normalizeCheckoutLabel(value);
-  const durationMatch = label.match(/\b(4|8|12)\s+semaines?\b/);
+  // Webflow colle parfois la devise et la durée: "EUR8 semaines".
+  const durationMatch = label.match(/(?:^|[^0-9])(4|8|12)\s+semaines?\b/);
   const duration = durationMatch ? Number(durationMatch[1]) : null;
   let canonicalName = null;
 

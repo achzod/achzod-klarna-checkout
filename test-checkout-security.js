@@ -78,11 +78,11 @@ test('accepte les libellés Webflow pollués par prix, quantité et HTML encodé
   const cart = validateAndPriceCart({
     items: [
       {
-        name: 'Coaching ESSENTIAL € 399,00 EUR 8 semaines Essential Qté: 1%3Cspan%3Edata-w',
+        name: 'Coaching ESSENTIAL€ 399,00 EUR8 semaines EssentialQté: 1%3Cli%3E%3Cspan%20data-w',
         price: 399,
       },
       {
-        name: 'Coaching ELITE € 399,00 EUR 4 semaines - ELITE Qté: 1%3Cdiv%3E',
+        name: 'Coaching ELITE€ 399,00 EUR4 semaines - ELITEQté: 1%3Cdiv%3E',
         price: 399,
       },
     ],

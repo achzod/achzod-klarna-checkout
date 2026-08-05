@@ -75,7 +75,8 @@
       .replace(/[^a-z0-9]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    var durationMatch = normalized.match(/\b(4|8|12)\s+semaines?\b/);
+    // Webflow colle parfois la devise et la durée: "EUR8 semaines".
+    var durationMatch = normalized.match(/(?:^|[^0-9])(4|8|12)\s+semaines?\b/);
     var duration = durationMatch ? durationMatch[1] : '';
 
     if (normalized.indexOf('private lab') !== -1 && duration) return 'Private Lab ' + duration + ' semaines';

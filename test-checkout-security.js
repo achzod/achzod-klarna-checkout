@@ -74,6 +74,26 @@ test('accepte les libellés checkout Webflow enrichis pour Klarna', () => {
   assert.equal(cart.items[0].name, 'Elite 8 semaines');
 });
 
+test('accepte les libellés Webflow pollués par prix, quantité et HTML encodé', () => {
+  const cart = validateAndPriceCart({
+    items: [
+      {
+        name: 'Coaching ESSENTIAL € 399,00 EUR 8 semaines Essential Qté: 1%3Cspan%3Edata-w',
+        price: 399,
+      },
+      {
+        name: 'Coaching ELITE € 399,00 EUR 4 semaines - ELITE Qté: 1%3Cdiv%3E',
+        price: 399,
+      },
+    ],
+    totalAmount: 638.40,
+    discountCode: 'ZOD20',
+  });
+  assert.deepEqual(cart.items.map((item) => item.name), ['Essential 8 semaines', 'Elite 4 semaines']);
+  assert.equal(cart.subtotalCents, 79800);
+  assert.equal(cart.totalCents, 63840);
+});
+
 test('récupère une quantité implicite mono-produit depuis le total checkout', () => {
   const cart = validateAndPriceCart({
     totalAmount: 1298,

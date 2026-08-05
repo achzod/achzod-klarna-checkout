@@ -57,6 +57,38 @@
     return Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= 10 ? quantity : 1;
   }
 
+  function decodeWebflowText(value) {
+    var text = String(value || '');
+    try {
+      text = decodeURIComponent(text);
+    } catch (_) {}
+    return text;
+  }
+
+  function cleanProductName(value) {
+    var original = decodeWebflowText(value);
+    var normalized = original
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    var durationMatch = normalized.match(/\b(4|8|12)\s+semaines?\b/);
+    var duration = durationMatch ? durationMatch[1] : '';
+
+    if (normalized.indexOf('private lab') !== -1 && duration) return 'Private Lab ' + duration + ' semaines';
+    if (normalized.indexOf('essential') !== -1 && duration) return 'Essential ' + duration + ' semaines';
+    if (normalized.indexOf('elite') !== -1 && duration) return 'Elite ' + duration + ' semaines';
+    if (normalized.indexOf('coaching sans suivi') !== -1) return 'Coaching sans suivi';
+    if (normalized.indexOf('anabolic code') !== -1) return 'Anabolic Code';
+    if (normalized.indexOf('bioenergetique') !== -1) return 'Bioénergétique et timing de la nutrition';
+    if (normalized.indexOf('liberer son potentiel') !== -1) return 'Libérer son potentiel génétique';
+    if (normalized.indexOf('shred') !== -1) return '4 semaines pour être SHRED';
+    return original.trim().slice(0, 120);
+  }
+
   // Source de vérité : le DOM du checkout Webflow. On ne s'appuie plus sur
   // aucun backup localStorage/cookie — c'était la source du bug où les produits
   // s'accumulaient au retour depuis Klarna.
@@ -64,9 +96,17 @@
     return Array.prototype.map.call(
       document.querySelectorAll(CHECKOUT_ITEM_SELECTOR),
       function (row) {
+        // Webflow peut laisser d'anciennes lignes cachées dans le DOM après un
+        // retour navigateur. Elles ne font pas partie du panier affiché.
+        var style = window.getComputedStyle(row);
+        var rect = row.getBoundingClientRect();
+        if (style.display === 'none' || style.visibility === 'hidden'
+          || style.opacity === '0' || rect.width === 0 || rect.height === 0) {
+          return null;
+        }
         var nameNode = row.querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
         var priceNode = row.querySelector('.w-commerce-commercecheckoutorderitemprice');
-        var name = nameNode ? nameNode.textContent.trim() : '';
+        var name = cleanProductName(nameNode ? nameNode.textContent : row.textContent);
         var price = parseEuro(priceNode ? priceNode.textContent : row.textContent);
         return name && price ? { name: name.slice(0, 120), price: price, quantity: parseQuantity(row) } : null;
       }
@@ -164,7 +204,10 @@
   // du panier réel côté serveur Webflow au lieu du snapshot mis en cache.
   function setupBFCacheReload() {
     window.addEventListener('pageshow', function (event) {
-      if (event.persisted) {
+      var navigation = window.performance && window.performance.getEntriesByType
+        ? window.performance.getEntriesByType('navigation')[0]
+        : null;
+      if (event.persisted || (navigation && navigation.type === 'back_forward')) {
         window.location.reload();
       }
     });

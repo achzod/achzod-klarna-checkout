@@ -49,6 +49,33 @@ for (const product of PRODUCTS) {
   }
 }
 
+function resolveProduct(value) {
+  const exact = PRODUCT_BY_ALIAS.get(normalizeProductName(value))
+    || PRODUCT_BY_ALIAS.get(normalizeCheckoutLabel(value));
+  if (exact) return exact;
+
+  // Webflow peut concaténer le nom, le prix, la quantité et même du HTML
+  // encodé dans descriptionwrapper. On identifie alors la formule à partir
+  // des marqueurs stables (gamme + durée), sans utiliser le reste du texte.
+  const label = normalizeCheckoutLabel(value);
+  const durationMatch = label.match(/\b(4|8|12)\s+semaines?\b/);
+  const duration = durationMatch ? Number(durationMatch[1]) : null;
+  let canonicalName = null;
+
+  if (label.includes('private lab') && duration) canonicalName = `Private Lab ${duration} semaines`;
+  else if (label.includes('essential') && duration) canonicalName = `Essential ${duration} semaines`;
+  else if (label.includes('elite') && duration) canonicalName = `Elite ${duration} semaines`;
+  else if (label.includes('coaching sans suivi')) canonicalName = 'Coaching sans suivi';
+  else if (label.includes('anabolic code')) canonicalName = 'Anabolic Code';
+  else if (label.includes('bioenergetique')) canonicalName = 'Bioénergétique et timing de la nutrition';
+  else if (label.includes('liberer son potentiel')) canonicalName = 'Libérer son potentiel génétique';
+  else if (label.includes('shred')) canonicalName = '4 semaines pour être SHRED';
+
+  return canonicalName
+    ? PRODUCTS.find((product) => product.name === canonicalName) || null
+    : null;
+}
+
 class CheckoutValidationError extends Error {
   constructor(message) {
     super(message);
@@ -86,8 +113,7 @@ function validateAndPriceCart(body) {
     if (!item || typeof item.name !== 'string') {
       throw new CheckoutValidationError('Produit invalide');
     }
-    const product = PRODUCT_BY_ALIAS.get(normalizeProductName(item.name))
-      || PRODUCT_BY_ALIAS.get(normalizeCheckoutLabel(item.name));
+    const product = resolveProduct(item.name);
     if (!product) {
       throw new CheckoutValidationError(`Produit inconnu: ${String(item.name).slice(0, 80)}`);
     }

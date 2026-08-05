@@ -84,8 +84,56 @@ test('récupère une quantité implicite mono-produit depuis le total checkout',
   assert.equal(cart.items[0].quantity, 2);
 });
 
-test('bloque un code promo non validé côté serveur', () => {
-  rejects({ discountCode: 'FAUX99', items: [{ name: 'Starter' }] }, /validé côté serveur/);
+test('applique les trois codes ApexLabs aux coachings', () => {
+  for (const [discountCode, discountCents] of [['BIOSCAN59', 5900], ['ULTIMATE79', 7900], ['BLOOD99', 9900]]) {
+    const cart = validateAndPriceCart({ discountCode, items: [{ name: 'Essential 12 semaines', quantity: 2 }] });
+    assert.equal(cart.subtotalCents, 109800);
+    assert.equal(cart.discountCents, discountCents);
+    assert.equal(cart.totalCents, 109800 - discountCents);
+    assert.equal(cart.promotionCode, discountCode);
+  }
+});
+
+test('récupère quantité 2 et BLOOD99 depuis l’ancien bouton Webflow', () => {
+  const cart = validateAndPriceCart({
+    totalAmount: 999,
+    items: [{ name: 'Essential 12 semaines', quantity: 1 }],
+  });
+  assert.equal(cart.items[0].quantity, 2);
+  assert.equal(cart.subtotalCents, 109800);
+  assert.equal(cart.discountCents, 9900);
+  assert.equal(cart.promotionCode, 'BLOOD99');
+  assert.equal(cart.totalCents, 99900);
+});
+
+test('accepte une remise ApexLabs sur panier mixte avec quantités exactes', () => {
+  const cart = validateAndPriceCart({
+    totalAmount: 1078,
+    items: [
+      { name: 'Essential 12 semaines', quantity: 2 },
+      { name: 'Anabolic Code', quantity: 1 },
+    ],
+  });
+  assert.equal(cart.subtotalCents, 117700);
+  assert.equal(cart.promotionCode, 'BLOOD99');
+  assert.equal(cart.totalCents, 107800);
+});
+
+test('applique FAQ50 uniquement aux ebooks', () => {
+  const cart = validateAndPriceCart({
+    discountCode: 'FAQ50',
+    items: [{ name: 'Anabolic Code' }, { name: 'Bioénergétique' }],
+  });
+  assert.equal(cart.subtotalCents, 13800);
+  assert.equal(cart.discountCents, 6900);
+  assert.equal(cart.totalCents, 6900);
+  rejects({ discountCode: 'FAQ50', items: [{ name: 'Essential 4 semaines' }] }, /ne s’applique pas/);
+});
+
+test('bloque les remises manipulées, les codes inconnus et Starter supprimé', () => {
+  rejects({ totalAmount: 998, items: [{ name: 'Essential 12 semaines', quantity: 1 }] }, /code promo autorisé/);
+  rejects({ discountCode: 'FAUX99', items: [{ name: 'Essential 12 semaines' }] }, /Code promo inconnu/);
+  rejects({ items: [{ name: 'Starter' }] }, /Produit inconnu/);
 });
 
 test('protège chaque produit du catalogue contre prix et total falsifiés', () => {

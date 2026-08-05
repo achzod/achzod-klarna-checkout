@@ -20,22 +20,28 @@ function normalizeCheckoutLabel(value) {
 }
 
 const PRODUCTS = [
-  { name: 'Coaching sans suivi', amount: 9900, priceId: 'price_1SdvMiBTm0rdlVFq1quX3O14', aliases: ['coaching sans suivi'] },
-  { name: 'Starter', amount: 14900, priceId: 'price_1SdvMiBTm0rdlVFqqNzpgaPc', aliases: ['starter'] },
-  { name: 'Essential 4 semaines', amount: 24900, priceId: 'price_1SdvMiBTm0rdlVFqLfsmZktn', aliases: ['essential 4 semaines', '4 semaines essential', 'coaching essential 4 semaines', 'coaching essential 4 semaines essential'] },
-  { name: 'Essential 8 semaines', amount: 39900, priceId: 'price_1SdvMhBTm0rdlVFqH5DLanUx', aliases: ['essential 8 semaines', '8 semaines essential', 'coaching essential 8 semaines', 'coaching essential 8 semaines essential'] },
-  { name: 'Essential 12 semaines', amount: 54900, priceId: 'price_1SdvMhBTm0rdlVFqwk0q6GSp', aliases: ['essential 12 semaines', '12 semaines essential', 'coaching essential 12 semaines', 'coaching essential 12 semaines essential'] },
-  { name: 'Elite 4 semaines', amount: 39900, priceId: 'price_1SdvMgBTm0rdlVFqzHfzhM8K', aliases: ['elite 4 semaines', '4 semaines elite', 'coaching elite 4 semaines', 'coaching elite 4 semaines elite'] },
-  { name: 'Elite 8 semaines', amount: 64900, priceId: 'price_1SdvMgBTm0rdlVFqN0ApjtgB', aliases: ['elite 8 semaines', '8 semaines elite', 'coaching elite 8 semaines', 'coaching elite 8 semaines elite'] },
-  { name: 'Elite 12 semaines', amount: 89900, priceId: 'price_1SdvMgBTm0rdlVFqstDCjSEg', aliases: ['elite 12 semaines', '12 semaines elite', 'coaching elite 12 semaines', 'coaching elite 12 semaines elite'] },
-  { name: 'Private Lab 4 semaines', amount: 49900, priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', aliases: ['private lab 4 semaines', '4 semaines private lab', 'achzod private lab 4 semaines', 'coaching private lab 4 semaines', 'coaching private lab 4 semaines private lab'] },
-  { name: 'Private Lab 8 semaines', amount: 79900, priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', aliases: ['private lab 8 semaines', '8 semaines private lab', 'achzod private lab 8 semaines', 'coaching private lab 8 semaines', 'coaching private lab 8 semaines private lab'] },
-  { name: 'Private Lab 12 semaines', amount: 119900, priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', aliases: ['private lab 12 semaines', '12 semaines private lab', 'achzod private lab 12 semaines', 'coaching private lab 12 semaines', 'coaching private lab 12 semaines private lab'] },
-  { name: 'Anabolic Code', amount: 7900, priceId: 'price_1SdvMeBTm0rdlVFqZEmcaDNm', aliases: ['anabolic code'] },
-  { name: 'Libérer son potentiel génétique', amount: 4900, priceId: 'price_1SdvMeBTm0rdlVFqTi8xNboT', aliases: ['liberer son potentiel', 'liberer son potentiel genetique', 'liberer son potentiel genetique en 10 semaines'] },
-  { name: '4 semaines pour être SHRED', amount: 4900, priceId: 'price_1SdvMdBTm0rdlVFqHi638498', aliases: ['4 semaines pour etre shred', '4 semaines pour etre shred perte de gras et prise de muscles', '4 semaines shred'] },
-  { name: 'Bioénergétique et timing de la nutrition', amount: 5900, priceId: 'price_1SdvMdBTm0rdlVFqboosk1lb', aliases: ['bioenergetique', 'bioenergetique et timing', 'bioenergetique et timing de la nutrition'] },
+  { name: 'Coaching sans suivi', kind: 'coaching', amount: 9900, priceId: 'price_1SdvMiBTm0rdlVFq1quX3O14', aliases: ['coaching sans suivi'] },
+  { name: 'Essential 4 semaines', kind: 'coaching', amount: 24900, priceId: 'price_1SdvMiBTm0rdlVFqLfsmZktn', aliases: ['essential 4 semaines', '4 semaines essential', 'coaching essential 4 semaines', 'coaching essential 4 semaines essential'] },
+  { name: 'Essential 8 semaines', kind: 'coaching', amount: 39900, priceId: 'price_1SdvMhBTm0rdlVFqH5DLanUx', aliases: ['essential 8 semaines', '8 semaines essential', 'coaching essential 8 semaines', 'coaching essential 8 semaines essential'] },
+  { name: 'Essential 12 semaines', kind: 'coaching', amount: 54900, priceId: 'price_1SdvMhBTm0rdlVFqwk0q6GSp', aliases: ['essential 12 semaines', '12 semaines essential', 'coaching essential 12 semaines', 'coaching essential 12 semaines essential'] },
+  { name: 'Elite 4 semaines', kind: 'coaching', amount: 39900, priceId: 'price_1SdvMgBTm0rdlVFqzHfzhM8K', aliases: ['elite 4 semaines', '4 semaines elite', 'coaching elite 4 semaines', 'coaching elite 4 semaines elite'] },
+  { name: 'Elite 8 semaines', kind: 'coaching', amount: 64900, priceId: 'price_1SdvMgBTm0rdlVFqN0ApjtgB', aliases: ['elite 8 semaines', '8 semaines elite', 'coaching elite 8 semaines', 'coaching elite 8 semaines elite'] },
+  { name: 'Elite 12 semaines', kind: 'coaching', amount: 89900, priceId: 'price_1SdvMgBTm0rdlVFqstDCjSEg', aliases: ['elite 12 semaines', '12 semaines elite', 'coaching elite 12 semaines', 'coaching elite 12 semaines elite'] },
+  { name: 'Private Lab 4 semaines', kind: 'coaching', amount: 49900, priceId: 'price_1SdvMfBTm0rdlVFq3DbslVyj', aliases: ['private lab 4 semaines', '4 semaines private lab', 'achzod private lab 4 semaines', 'coaching private lab 4 semaines', 'coaching private lab 4 semaines private lab'] },
+  { name: 'Private Lab 8 semaines', kind: 'coaching', amount: 79900, priceId: 'price_1SdvMfBTm0rdlVFq1RDNoRrL', aliases: ['private lab 8 semaines', '8 semaines private lab', 'achzod private lab 8 semaines', 'coaching private lab 8 semaines', 'coaching private lab 8 semaines private lab'] },
+  { name: 'Private Lab 12 semaines', kind: 'coaching', amount: 119900, priceId: 'price_1SdvMeBTm0rdlVFqtP697rjn', aliases: ['private lab 12 semaines', '12 semaines private lab', 'achzod private lab 12 semaines', 'coaching private lab 12 semaines', 'coaching private lab 12 semaines private lab'] },
+  { name: 'Anabolic Code', kind: 'ebook', amount: 7900, priceId: 'price_1SdvMeBTm0rdlVFqZEmcaDNm', aliases: ['anabolic code'] },
+  { name: 'Libérer son potentiel génétique', kind: 'ebook', amount: 4900, priceId: 'price_1SdvMeBTm0rdlVFqTi8xNboT', aliases: ['liberer son potentiel', 'liberer son potentiel genetique', 'liberer son potentiel genetique en 10 semaines'] },
+  { name: '4 semaines pour être SHRED', kind: 'ebook', amount: 4900, priceId: 'price_1SdvMdBTm0rdlVFqHi638498', aliases: ['4 semaines pour etre shred', '4 semaines pour etre shred perte de gras et prise de muscles', '4 semaines shred'] },
+  { name: 'Bioénergétique et timing de la nutrition', kind: 'ebook', amount: 5900, priceId: 'price_1SdvMdBTm0rdlVFqboosk1lb', aliases: ['bioenergetique', 'bioenergetique et timing', 'bioenergetique et timing de la nutrition'] },
 ];
+
+const PROMOTIONS = Object.freeze({
+  BIOSCAN59: Object.freeze({ code: 'BIOSCAN59', amountOff: 5900, eligibleKind: 'coaching' }),
+  ULTIMATE79: Object.freeze({ code: 'ULTIMATE79', amountOff: 7900, eligibleKind: 'coaching' }),
+  BLOOD99: Object.freeze({ code: 'BLOOD99', amountOff: 9900, eligibleKind: 'coaching' }),
+  FAQ50: Object.freeze({ code: 'FAQ50', percentOff: 50, eligibleKind: 'ebook', exclusiveKind: true }),
+});
 
 const PRODUCT_BY_ALIAS = new Map();
 for (const product of PRODUCTS) {
@@ -54,32 +60,63 @@ class CheckoutValidationError extends Error {
   }
 }
 
-function recoverImplicitSingleItemQuantity(pricedItems, body) {
-  if (!body || body.totalAmount === undefined || body.totalAmount === null || body.totalAmount === '') {
-    return null;
-  }
-  if (pricedItems.length !== 1) return null;
-  if (body.items.some((item) => item && item.quantity !== undefined && item.quantity !== null && item.quantity !== '')) {
-    return null;
+function normalizePromotionCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function promotionDiscountCents(promotion, items, subtotalCents) {
+  if (!promotion) return 0;
+  const eligible = items.filter((item) => item.kind === promotion.eligibleKind);
+  if (eligible.length === 0) return null;
+  if (promotion.exclusiveKind && eligible.length !== items.length) return null;
+  if (promotion.amountOff) return Math.min(promotion.amountOff, subtotalCents);
+  if (promotion.percentOff) return Math.round(subtotalCents * promotion.percentOff / 100);
+  return null;
+}
+
+function resolvePromotion(items, subtotalCents, clientTotalCents, requestedCode) {
+  if (requestedCode) {
+    const promotion = PROMOTIONS[requestedCode];
+    if (!promotion) throw new CheckoutValidationError('Code promo inconnu');
+    const discountCents = promotionDiscountCents(promotion, items, subtotalCents);
+    if (!Number.isSafeInteger(discountCents) || discountCents <= 0) {
+      throw new CheckoutValidationError('Ce code promo ne s’applique pas à ce panier');
+    }
+    if (clientTotalCents !== null && subtotalCents - discountCents !== clientTotalCents) {
+      throw new CheckoutValidationError('Le total remisé ne correspond pas au code promo');
+    }
+    return { promotionCode: promotion.code, discountCents };
   }
 
-  const item = pricedItems[0];
-  const clientTotal = Number(body.totalAmount);
-  if (!Number.isFinite(clientTotal) || clientTotal <= 0) {
-    return null;
+  if (clientTotalCents === null || clientTotalCents === subtotalCents) {
+    return { promotionCode: null, discountCents: 0 };
   }
 
-  const clientTotalCents = Math.round(clientTotal * 100);
-  if (!Number.isSafeInteger(clientTotalCents)) {
-    return null;
+  const matches = Object.values(PROMOTIONS).flatMap((promotion) => {
+    const discountCents = promotionDiscountCents(promotion, items, subtotalCents);
+    return Number.isSafeInteger(discountCents) && subtotalCents - discountCents === clientTotalCents
+      ? [{ promotionCode: promotion.code, discountCents }]
+      : [];
+  });
+  if (matches.length !== 1) {
+    throw new CheckoutValidationError('Le total remisé ne correspond ni au prix catalogue ni à un code promo autorisé');
   }
+  return matches[0];
+}
 
-  const recoveredQuantity = clientTotalCents / item.amount;
-  if (!Number.isSafeInteger(recoveredQuantity) || recoveredQuantity < 1 || recoveredQuantity > 10) {
-    return null;
+function recoverSingleItemCart(item, clientTotalCents, requestedCode) {
+  const matches = [];
+  for (let quantity = 1; quantity <= 10; quantity += 1) {
+    const candidate = [{ ...item, quantity }];
+    const subtotalCents = item.amount * quantity;
+    try {
+      const promotion = resolvePromotion(candidate, subtotalCents, clientTotalCents, requestedCode);
+      matches.push({ items: candidate, subtotalCents, ...promotion });
+    } catch (error) {
+      if (!(error instanceof CheckoutValidationError)) throw error;
+    }
   }
-
-  return [{ ...item, quantity: recoveredQuantity }];
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function validateAndPriceCart(body) {
@@ -107,36 +144,48 @@ function validateAndPriceCart(body) {
   });
 
   let effectiveItems = pricedItems;
-  let totalCents = effectiveItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
-  if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
+  let subtotalCents = effectiveItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+  if (!Number.isSafeInteger(subtotalCents) || subtotalCents <= 0) {
     throw new CheckoutValidationError('Total du panier invalide');
   }
 
-  // Les montants et codes venant du navigateur ne sont jamais une source de prix.
-  // Un total transmis est accepté seulement s'il correspond exactement au catalogue.
+  const requestedCode = normalizePromotionCode(body.discountCode || body.promoCode);
+  let clientTotalCents = null;
   if (body.totalAmount !== undefined && body.totalAmount !== null && body.totalAmount !== '') {
     const clientTotal = Number(body.totalAmount);
-    const clientTotalCents = Math.round(clientTotal * 100);
-    if (!Number.isFinite(clientTotal)) {
-      throw new CheckoutValidationError('Le total transmis ne correspond pas au prix catalogue');
+    clientTotalCents = Math.round(clientTotal * 100);
+    if (!Number.isFinite(clientTotal) || !Number.isSafeInteger(clientTotalCents) || clientTotalCents <= 0) {
+      throw new CheckoutValidationError('Total transmis invalide');
     }
-    if (clientTotalCents !== totalCents) {
-      const recoveredItems = recoverImplicitSingleItemQuantity(effectiveItems, body);
-      if (!recoveredItems) {
-        throw new CheckoutValidationError('Le total transmis ne correspond pas au prix catalogue');
-      }
-      effectiveItems = recoveredItems;
-      totalCents = effectiveItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
-      if (clientTotalCents !== totalCents) {
-        throw new CheckoutValidationError('Le total transmis ne correspond pas au prix catalogue');
-      }
-    }
-  }
-  if (body.discountCode) {
-    throw new CheckoutValidationError('Ce code promo doit être validé côté serveur');
   }
 
-  return { items: effectiveItems, totalCents };
+  let promotion;
+  try {
+    promotion = resolvePromotion(effectiveItems, subtotalCents, clientTotalCents, requestedCode);
+  } catch (error) {
+    // L’ancien bouton Webflow envoyait toujours quantity: 1. Pour un panier
+    // mono-produit, on peut retrouver sans ambiguïté la quantité et la remise
+    // à partir des seuls prix catalogue et codes autorisés.
+    const recovered = clientTotalCents !== null && effectiveItems.length === 1
+      ? recoverSingleItemCart(effectiveItems[0], clientTotalCents, requestedCode)
+      : null;
+    if (!recovered) throw error;
+    effectiveItems = recovered.items;
+    subtotalCents = recovered.subtotalCents;
+    promotion = recovered;
+  }
+
+  const totalCents = subtotalCents - promotion.discountCents;
+  if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
+    throw new CheckoutValidationError('Total remisé invalide');
+  }
+  return {
+    items: effectiveItems,
+    subtotalCents,
+    totalCents,
+    discountCents: promotion.discountCents,
+    promotionCode: promotion.promotionCode,
+  };
 }
 
 function buildLineItems(body, useStripePriceIds) {
@@ -158,6 +207,7 @@ function buildLineItems(body, useStripePriceIds) {
 
 module.exports = {
   CheckoutValidationError,
+  PROMOTIONS,
   PRODUCTS,
   buildLineItems,
   normalizeProductName,

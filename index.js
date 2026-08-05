@@ -2,9 +2,18 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
-const { CheckoutValidationError, buildLineItems } = require('./checkout-security');
+const { CheckoutValidationError, PRODUCTS, buildLineItems } = require('./checkout-security');
+const {
+  CheckoutRequestError,
+  buildCheckoutMetadata,
+  buildCheckoutUrls,
+  buildIdempotencyKey,
+  getStripePromotionId,
+  validateCustomerEmail,
+} = require('./checkout-runtime');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Stripe UAE (paiements normaux : cartes, Apple Pay, etc.)
 const stripeUAE = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -78,13 +87,29 @@ app.use(cors({
     return callback(new Error('Origin non autorisée'));
   },
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Stripe-Signature', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Stripe-Signature', 'Authorization', 'X-Checkout-Attempt'],
 }));
 
 // Webhook Stripe doit recevoir le body brut
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use('/webhook-klarna', express.raw({ type: 'application/json' }));
-app.use(express.json());
+app.use(express.json({ limit: '64kb' }));
+
+const checkoutRateBuckets = new Map();
+function checkoutRateLimit(req, res, next) {
+  const now = Date.now();
+  const key = String(req.ip || 'unknown');
+  const bucket = checkoutRateBuckets.get(key);
+  if (!bucket || now - bucket.startedAt > 2 * 60 * 1000) {
+    checkoutRateBuckets.set(key, { startedAt: now, count: 1 });
+    return next();
+  }
+  bucket.count += 1;
+  if (bucket.count > 20) {
+    return res.status(429).json({ error: 'Trop de tentatives. Réessaie dans deux minutes.' });
+  }
+  next();
+}
 
 function requireDiagnosticAuth(req, res, next) {
   const expected = process.env.DIAGNOSTIC_TOKEN;
@@ -103,7 +128,6 @@ function requireDiagnosticAuth(req, res, next) {
 const PRICE_MAPPING = {
   // Coaching
   'coaching sans suivi': 'price_1SdvMiBTm0rdlVFq1quX3O14',
-  'starter': 'price_1SdvMiBTm0rdlVFqqNzpgaPc',
 
   // Essential
   'essential 4 semaines': 'price_1SdvMiBTm0rdlVFqLfsmZktn',
@@ -141,7 +165,6 @@ const PRICE_MAPPING = {
 // Mapping par montant en centimes (fallback)
 const PRICE_BY_AMOUNT = {
   9900: 'price_1SdvMiBTm0rdlVFq1quX3O14',
-  14900: 'price_1SdvMiBTm0rdlVFqqNzpgaPc',
   24900: 'price_1SdvMiBTm0rdlVFqLfsmZktn',
   39900: 'price_1SdvMhBTm0rdlVFqH5DLanUx',
   54900: 'price_1SdvMhBTm0rdlVFqwk0q6GSp',
@@ -176,48 +199,53 @@ function findPriceId(productName, amount) {
 async function createCheckoutSession(req, res) {
   try {
     const { successUrl, cancelUrl, customerEmail } = req.body;
-    const { lineItems } = buildLineItems(req.body, true);
-
-    // Utiliser {CHECKOUT_SESSION_ID} dans l'URL de success pour que Stripe le remplace automatiquement
-    const baseSuccessUrl = successUrl || 'https://achzodcoaching.com/order-confirmation';
-    const successUrlWithSessionId = `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`;
+    const cart = buildLineItems(req.body, true);
+    const email = validateCustomerEmail(customerEmail);
+    const urls = buildCheckoutUrls(successUrl, cancelUrl);
     
     const sessionConfig = {
       payment_method_types: ['card', 'link'],
-      line_items: lineItems,
+      line_items: cart.lineItems,
       mode: 'payment',
-      success_url: successUrlWithSessionId,
-      cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
+      success_url: urls.successUrl,
+      cancel_url: urls.cancelUrl,
       billing_address_collection: 'required',
       locale: 'fr',
       // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
-      metadata: {
-        merchant_name: 'achzodcoaching',
-        business_name: 'AchzodCoaching'
-      }
+      metadata: buildCheckoutMetadata(cart),
       // Note: Ne pas définir receipt_email = pas de reçu Stripe automatique
       // Les reçus Stripe doivent être désactivés dans le dashboard Stripe
     };
 
     // Ajouter l'email du client (pour pré-remplir le formulaire, PAS pour le reçu Stripe)
     // On n'envoie PAS de receipt_email car on envoie notre propre email ACHZOD via webhook
-    if (customerEmail && customerEmail.trim()) {
-      sessionConfig.customer_email = customerEmail.trim();
+    if (email) {
+      sessionConfig.customer_email = email;
       // PAS de receipt_email = pas de reçu Stripe automatique
     }
 
     // Si erreur "No such price", recréer avec price_data uniquement
     try {
       // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
-      const session = await stripeUAE.checkout.sessions.create(sessionConfig);
+      if (cart.promotionCode) {
+        sessionConfig.discounts = [{ promotion_code: getStripePromotionId(cart.promotionCode, process.env, 'UAE') }];
+      }
+      const session = await stripeUAE.checkout.sessions.create(
+        sessionConfig,
+        { idempotencyKey: buildIdempotencyKey(req, cart, email) },
+      );
       res.json({ url: session.url });
     } catch (error) {
       if (error.message && error.message.includes('No such price')) {
         console.log('⚠️  Price ID invalide, utilisation de price_data pour tous les items');
         // Recréer lineItems avec price_data uniquement
-        sessionConfig.line_items = buildLineItems(req.body, false).lineItems;
+        const fallbackCart = buildLineItems(req.body, false);
+        sessionConfig.line_items = fallbackCart.lineItems;
         // Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
-        const session = await stripeUAE.checkout.sessions.create(sessionConfig);
+        const session = await stripeUAE.checkout.sessions.create(
+          sessionConfig,
+          { idempotencyKey: `${buildIdempotencyKey(req, fallbackCart, email)}_inline` },
+        );
         res.json({ url: session.url });
       } else {
         throw error;
@@ -226,10 +254,13 @@ async function createCheckoutSession(req, res) {
 
   } catch (error) {
     console.error('Erreur Stripe:', error);
-    res.status(error instanceof CheckoutValidationError ? 400 : 500).json({ error: error.message });
+    const clientError = error instanceof CheckoutValidationError || error instanceof CheckoutRequestError;
+    res.status(clientError ? 400 : 500).json({
+      error: clientError ? error.message : 'Impossible de lancer le paiement. Réessaie dans un instant.',
+    });
   }
 }
-app.post(['/checkout', '/create-checkout-session'], createCheckoutSession);
+app.post(['/checkout', '/create-checkout-session'], checkoutRateLimit, createCheckoutSession);
 
 // Route Klarna - Utilise Stripe FR
 async function createKlarnaSession(req, res) {
@@ -240,8 +271,10 @@ async function createKlarnaSession(req, res) {
   
   try {
     const { successUrl, cancelUrl, customerEmail } = req.body;
-    const { lineItems, totalCents } = buildLineItems(req.body, false);
-    const effectiveTotal = totalCents / 100;
+    const cart = buildLineItems(req.body, false);
+    const email = validateCustomerEmail(customerEmail);
+    const urls = buildCheckoutUrls(successUrl, cancelUrl);
+    const effectiveTotal = cart.totalCents / 100;
     const KLARNA_MIN_TOTAL_EUR = Number(process.env.KLARNA_MIN_TOTAL_EUR || 0.5);
     if (effectiveTotal > 0 && effectiveTotal < KLARNA_MIN_TOTAL_EUR) {
       return res.status(400).json({
@@ -249,33 +282,28 @@ async function createKlarnaSession(req, res) {
       });
     }
 
-    // Utiliser {CHECKOUT_SESSION_ID} dans l'URL de success pour que Stripe le remplace automatiquement
-    const baseSuccessUrl = successUrl || 'https://achzodcoaching.com/order-confirmation';
-    const successUrlWithSessionId = `${baseSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`;
-    
     const sessionConfig = {
       // Card en premier pour éviter les blocages Klarna
       // Si Klarna est disponible, Stripe l'affichera automatiquement
       payment_method_types: ['card', 'klarna'],
-      line_items: lineItems,
+      line_items: cart.lineItems,
       mode: 'payment',
-      success_url: successUrlWithSessionId,
-      cancel_url: cancelUrl || 'https://achzodcoaching.com/checkout',
+      success_url: urls.successUrl,
+      cancel_url: urls.cancelUrl,
       billing_address_collection: 'required',
       locale: 'fr',
-      // Expiration plus longue pour éviter les sessions expirées
-      expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
       // Métadonnées pour que Stripe affiche "achzodcoaching" au lieu du nom personnel
-      metadata: {
-        merchant_name: 'achzodcoaching',
-        business_name: 'AchzodCoaching'
-      }
+      metadata: buildCheckoutMetadata(cart),
       // Note: Ne pas définir receipt_email = pas de reçu Stripe automatique
       // Les reçus Stripe doivent être désactivés dans le dashboard Stripe
     };
 
-    if (customerEmail && customerEmail.trim()) {
-      sessionConfig.customer_email = customerEmail.trim();
+    if (email) {
+      sessionConfig.customer_email = email;
+    }
+
+    if (cart.promotionCode) {
+      sessionConfig.discounts = [{ promotion_code: getStripePromotionId(cart.promotionCode) }];
     }
 
     // Vérifier que stripeFR est bien initialisé
@@ -285,16 +313,22 @@ async function createKlarnaSession(req, res) {
     }
     
     // Créer la session - Stripe remplacera automatiquement {CHECKOUT_SESSION_ID} dans l'URL de success
-    const session = await stripeFR.checkout.sessions.create(sessionConfig);
+    const session = await stripeFR.checkout.sessions.create(
+      sessionConfig,
+      { idempotencyKey: buildIdempotencyKey(req, cart, email) },
+    );
     
     res.json({ url: session.url });
 
   } catch (error) {
     console.error('Erreur Stripe FR (Klarna):', error);
-    res.status(error instanceof CheckoutValidationError ? 400 : 500).json({ error: error.message });
+    const clientError = error instanceof CheckoutValidationError || error instanceof CheckoutRequestError;
+    res.status(clientError ? 400 : 500).json({
+      error: clientError ? error.message : 'Impossible de lancer Klarna. Réessaie dans un instant.',
+    });
   }
 }
-app.post(['/checkout-klarna', '/create-klarna-session'], createKlarnaSession);
+app.post(['/checkout-klarna', '/create-klarna-session'], checkoutRateLimit, createKlarnaSession);
 
 // Fonction pour trouver le lien ebook
 function findEbookLink(productName) {
@@ -534,9 +568,72 @@ async function sendEbookEmail(customerEmail, customerName, ebooks, totalAmount) 
   }
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function isCoachingProduct(productName) {
+  const normalized = String(productName || '').toLowerCase();
+  return PRODUCTS.some((product) => product.kind === 'coaching' &&
+    product.aliases.some((alias) => normalized.includes(alias)));
+}
+
+function generateCoachingEmailHTML(customerName, products, ebooks, totalAmount) {
+  const safeName = escapeHtml(customerName);
+  const items = products.map((product) => `<li style="margin:8px 0;color:#fff">${escapeHtml(product)}</li>`).join('');
+  const downloads = ebooks.length
+    ? `<p style="color:#aaa;margin:24px 0 10px">Tes téléchargements:</p>${ebooks.map((ebook) =>
+        `<p style="margin:8px 0"><a href="${escapeHtml(ebook.link)}" style="color:#FFB3C7">${escapeHtml(ebook.name)}</a></p>`
+      ).join('')}`
+    : '';
+  return `<!doctype html><html lang="fr"><body style="margin:0;background:#0A0B09;color:#fff;font-family:Arial,sans-serif;padding:24px">
+    <div style="max-width:620px;margin:auto;background:#151515;border:1px solid #2a2a2a;border-radius:16px;padding:32px">
+      <h1 style="color:#FFB3C7;margin:0 0 20px">Ton coaching est confirmé</h1>
+      <p style="line-height:1.7;color:#ddd">Merci${safeName ? ` ${safeName}` : ''}. Ton paiement est bien validé et ta place est réservée.</p>
+      <ul style="padding-left:22px">${items}</ul>
+      <p style="font-size:18px;color:#FFB3C7;font-weight:700">Total payé: ${escapeHtml(totalAmount)}€</p>
+      <p style="line-height:1.7;color:#ddd">Je te contacte rapidement pour lancer ton accompagnement et récupérer les informations nécessaires.</p>
+      ${downloads}
+      <p style="margin-top:28px"><a href="https://wa.me/971585210514?text=${encodeURIComponent('Salut Achzod, je viens de commander mon coaching.')}" style="display:inline-block;background:#25D366;color:#08130c;text-decoration:none;padding:14px 20px;border-radius:10px;font-weight:700">Me contacter sur WhatsApp</a></p>
+      <p style="margin-top:28px;color:#777;font-size:13px">Une question? Réponds directement à cet email.</p>
+    </div>
+  </body></html>`;
+}
+
+async function sendCustomerOrderEmail(customerEmail, customerName, products, ebooks, totalAmount) {
+  if (!products.some(isCoachingProduct)) {
+    return sendEbookEmail(customerEmail, customerName, ebooks, totalAmount);
+  }
+  try {
+    await transporter.sendMail({
+      from: {
+        name: 'AchzodCoaching',
+        address: process.env.EMAIL_USER || 'achzodyt@gmail.com',
+      },
+      to: customerEmail,
+      subject: 'Ton coaching ACHZOD est confirmé',
+      html: generateCoachingEmailHTML(customerName, products, ebooks, totalAmount),
+    });
+    console.log('Confirmation coaching envoyée à:', customerEmail);
+    return true;
+  } catch (error) {
+    console.error('Erreur confirmation coaching:', error);
+    return false;
+  }
+}
+
 // Fonction pour envoyer une notification à Achzod pour chaque commande Klarna
 async function sendOrderNotification(customerEmail, customerName, products, totalAmount, paymentMethod) {
-  const productList = products.map(p => `• ${p}`).join('\n');
+  const safeCustomerEmail = escapeHtml(customerEmail);
+  const safeCustomerName = escapeHtml(customerName || 'Non renseigné');
+  const safeProducts = products.map(escapeHtml);
+  const safeTotalAmount = escapeHtml(totalAmount);
+  const safePaymentMethod = escapeHtml(paymentMethod || 'Klarna/Stripe');
   
   const htmlNotification = `
 <!DOCTYPE html>
@@ -549,23 +646,23 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
     <table style="width: 100%; color: #fff; font-size: 14px;">
       <tr>
         <td style="padding: 8px 0; color: #888;">Client</td>
-        <td style="padding: 8px 0; color: #fff; font-weight: bold;">${customerName || 'Non renseigné'}</td>
+        <td style="padding: 8px 0; color: #fff; font-weight: bold;">${safeCustomerName}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #888;">Email</td>
-        <td style="padding: 8px 0; color: #FFB3C7;">${customerEmail}</td>
+        <td style="padding: 8px 0; color: #FFB3C7;">${safeCustomerEmail}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #888;">Produit(s)</td>
-        <td style="padding: 8px 0; color: #fff;">${products.join('<br>')}</td>
+        <td style="padding: 8px 0; color: #fff;">${safeProducts.join('<br>')}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #888;">Montant</td>
-        <td style="padding: 8px 0; color: #4CAF50; font-size: 20px; font-weight: bold;">${totalAmount}€</td>
+        <td style="padding: 8px 0; color: #4CAF50; font-size: 20px; font-weight: bold;">${safeTotalAmount}€</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #888;">Paiement</td>
-        <td style="padding: 8px 0; color: #fff;">${paymentMethod || 'Klarna/Stripe'}</td>
+        <td style="padding: 8px 0; color: #fff;">${safePaymentMethod}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #888;">Date</td>
@@ -603,159 +700,84 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
   }
 }
 
-// Webhook Stripe UAE (paiements normaux)
-app.post('/webhook', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const fulfillmentInFlight = new Set();
 
-  let event;
-
+async function fulfillPaidCheckout(stripe, sessionId, paymentMethod) {
+  if (fulfillmentInFlight.has(sessionId)) return { duplicate: true };
+  fulfillmentInFlight.add(sessionId);
   try {
-    if (!webhookSecret) throw new Error('Webhook secret UAE non configuré');
-    if (!sig) throw new Error('Signature Stripe absente');
-    event = stripeUAE.webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+    let session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== 'paid') return { pending: true };
 
-  // Traiter l'événement checkout.session.completed
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    if (session.payment_status !== 'paid') {
-      console.warn('Session UAE complétée mais non payée, livraison bloquée:', session.id);
-      return res.json({ received: true });
-    }
-    
-    console.log('Paiement réussi:', session.id);
-    
-    // Récupérer les détails de la session
-    const customerEmail = session.customer_email || session.customer_details?.email;
+    const customerEmail = session.customer_details?.email || session.customer_email;
     const customerName = session.customer_details?.name || '';
-    const totalAmount = session.amount_total ? (session.amount_total / 100).toFixed(2) : '0';
-    const paymentMethod = session.payment_method_types?.[0] || 'Stripe';
-    
-    if (customerEmail) {
-      // Récupérer les line items
-      try {
-        const lineItems = await stripeUAE.checkout.sessions.listLineItems(session.id);
-        const ebooks = [];
-        const productNames = [];
-        
-        for (const item of lineItems.data) {
-          const productName = item.description || item.price?.product?.name || item.price?.product?.description || 'Produit';
-          console.log('📦 Produit trouvé:', productName);
-          productNames.push(productName);
-          const ebookData = findEbookLink(productName);
-          
-          if (ebookData) {
-            ebooks.push(ebookData);
-          }
-        }
-        
-        console.log(`📧 ${ebooks.length} ebook(s) trouvé(s) sur ${productNames.length} produit(s)`);
-        console.log('📋 Produits:', productNames.join(', '));
-        
-        // Envoyer notification à Achzod pour TOUTES les commandes
-        await sendOrderNotification(customerEmail, '', productNames, totalAmount, paymentMethod);
-        
-        // Toujours envoyer l'email au client (avec ou sans liens)
-        // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
-        await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
-        if (ebooks.length > 0) {
-          console.log('✅ Email avec liens envoyé à:', customerEmail);
-        } else {
-          console.log('⚠️ Email envoyé SANS liens. Produits:', productNames.join(', '));
-        }
-      } catch (error) {
-        console.error('Erreur récupération line items:', error);
-      }
+    const totalAmount = session.amount_total ? (session.amount_total / 100).toFixed(2) : '0.00';
+    if (!customerEmail) throw new Error('Email client absent sur une commande payée');
+
+    const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 100 });
+    const ebooks = [];
+    const productNames = [];
+    for (const item of lineItems.data) {
+      const rawName = item.description || item.price?.nickname || 'Produit';
+      const displayName = item.quantity > 1 ? `${rawName} x${item.quantity}` : rawName;
+      productNames.push(displayName);
+      const ebookData = findEbookLink(rawName);
+      if (ebookData) ebooks.push(ebookData);
     }
-  }
 
-  res.json({ received: true });
-});
-
-// Webhook Stripe FR (Klarna uniquement)
-app.post('/webhook-klarna', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET_FR;
-
-  let event;
-
-  try {
-    event = stripeFR.webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) {
-    console.error('Webhook signature verification failed (FR):', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    
-    try {
-      const fullSession = await stripeFR.checkout.sessions.retrieve(session.id, {
-        expand: ['line_items', 'customer_details'],
+    if (!session.metadata?.admin_notification_sent_at) {
+      const sent = await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, paymentMethod);
+      if (!sent) throw new Error('Notification vendeur non envoyée');
+      session = await stripe.checkout.sessions.update(sessionId, {
+        metadata: { ...session.metadata, admin_notification_sent_at: new Date().toISOString() },
       });
-      if (fullSession.payment_status !== 'paid') {
-        console.warn('Session FR complétée mais non payée, livraison bloquée:', session.id);
-        return res.json({ received: true });
-      }
-
-      const customerEmail = fullSession.customer_details?.email || session.customer_email;
-      const customerName = fullSession.customer_details?.name || '';
-      const totalAmount = (fullSession.amount_total / 100).toFixed(2);
-
-      if (!customerEmail) {
-        console.log('No customer email found (FR)');
-        return res.json({ received: true });
-      }
-
-      const lineItems = await stripeFR.checkout.sessions.listLineItems(session.id);
-      const ebooks = [];
-      const productNames = [];
-      
-      for (const item of lineItems.data) {
-        // Essayer plusieurs champs pour trouver le nom du produit
-        const productName = item.description || 
-                            item.price?.product?.name || 
-                            item.price?.product?.description ||
-                            item.price?.nickname ||
-                            'Produit';
-        console.log('📦 Produit trouvé (FR):', productName);
-        console.log('   - description:', item.description);
-        console.log('   - price.product.name:', item.price?.product?.name);
-        console.log('   - price.product.description:', item.price?.product?.description);
-        productNames.push(productName);
-        const ebookData = findEbookLink(productName);
-        
-        if (ebookData) {
-          ebooks.push(ebookData);
-        }
-      }
-      
-      console.log(`📧 ${ebooks.length} ebook(s) trouvé(s) sur ${productNames.length} produit(s) (FR)`);
-      console.log('📋 Produits:', productNames.join(', '));
-      
-      // Envoyer notification à Achzod
-      const paymentMethod = 'Klarna (Stripe FR)';
-      await sendOrderNotification(customerEmail, '', productNames, totalAmount, paymentMethod);
-      
-      // Toujours envoyer l'email au client (avec ou sans liens)
-      // Ne pas utiliser le nom personnel, utiliser "achzodcoaching"
-      await sendEbookEmail(customerEmail, '', ebooks, totalAmount);
-      if (ebooks.length > 0) {
-        console.log('✅ Email avec liens envoyé à:', customerEmail);
-      } else {
-        console.log('⚠️ Email envoyé SANS liens. Produits:', productNames.join(', '));
-      }
-    } catch (error) {
-      console.error('Erreur webhook FR:', error);
     }
-  }
 
-  res.json({ received: true });
-});
+    if (!session.metadata?.customer_email_sent_at) {
+      const sent = await sendCustomerOrderEmail(customerEmail, customerName, productNames, ebooks, totalAmount);
+      if (!sent) throw new Error('Confirmation client non envoyée');
+      session = await stripe.checkout.sessions.update(sessionId, {
+        metadata: {
+          ...session.metadata,
+          customer_email_sent_at: new Date().toISOString(),
+          fulfillment_status: 'sent',
+        },
+      });
+    }
+    return { delivered: true };
+  } finally {
+    fulfillmentInFlight.delete(sessionId);
+  }
+}
+
+function registerStripeWebhook(path, stripe, secretName, paymentMethod) {
+  app.post(path, async (req, res) => {
+    const secret = process.env[secretName];
+    const signature = req.headers['stripe-signature'];
+    let event;
+    try {
+      if (!stripe || !secret || !signature) throw new Error('Configuration ou signature webhook absente');
+      event = stripe.webhooks.constructEvent(req.body, signature, secret);
+    } catch (error) {
+      console.error(`Webhook invalide ${path}:`, error.message);
+      return res.status(400).send('Webhook Error');
+    }
+
+    if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) {
+      return res.json({ received: true, ignored: true });
+    }
+    try {
+      const result = await fulfillPaidCheckout(stripe, event.data.object.id, paymentMethod);
+      return res.json({ received: true, ...result });
+    } catch (error) {
+      console.error(`Échec livraison ${path}:`, error);
+      return res.status(500).json({ received: true, delivered: false });
+    }
+  });
+}
+
+registerStripeWebhook('/webhook', stripeUAE, 'STRIPE_WEBHOOK_SECRET', 'Stripe');
+registerStripeWebhook('/webhook-klarna', stripeFR, 'STRIPE_WEBHOOK_SECRET_FR', 'Klarna');
 
 // Route pour récupérer les données complètes de la commande depuis la page de confirmation
 app.get('/order-data', async (req, res) => {
@@ -920,9 +942,40 @@ app.get('/download-links', async (req, res) => {
   }
 });
 
-// Health check
-app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'Achzod Klarna Checkout API' });
+function healthCheck(req, res) {
+  const requiredPromotions = ['BIOSCAN59', 'ULTIMATE79', 'BLOOD99', 'FAQ50'];
+  const promotionConfig = Object.fromEntries(requiredPromotions.map((code) => [
+    code,
+    {
+      fr: Boolean(process.env[`STRIPE_FR_PROMO_${code}`]),
+      uae: Boolean(process.env[`STRIPE_UAE_PROMO_${code}`]),
+    },
+  ]));
+  const checks = {
+    stripeUAE: Boolean(process.env.STRIPE_SECRET_KEY),
+    stripeFR: Boolean(process.env.STRIPE_SECRET_KEY_FR),
+    webhookUAE: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+    webhookFR: Boolean(process.env.STRIPE_WEBHOOK_SECRET_FR),
+    email: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
+    promotionsFR: Object.values(promotionConfig).every((entry) => entry.fr),
+    promotionsUAE: Object.values(promotionConfig).every((entry) => entry.uae),
+  };
+  const green = Object.values(checks).every(Boolean);
+  res.status(green ? 200 : 503).json({
+    status: green ? 'ok' : 'configuration_incomplete',
+    green,
+    checks,
+    promotionConfig,
+    catalogProducts: PRODUCTS.length,
+    starterRemoved: !PRODUCTS.some((product) => product.name.toLowerCase() === 'starter'),
+    timestamp: new Date().toISOString(),
+  });
+}
+app.get('/', healthCheck);
+app.get('/health', healthCheck);
+app.get('/webflow-klarna.js', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+  res.type('application/javascript').sendFile('webflow-klarna.js', { root: __dirname });
 });
 
 // Route pour créer/récupérer le webhook Stripe FR automatiquement
@@ -958,7 +1011,7 @@ app.get('/setup-webhook-fr', requireDiagnosticAuth, async (req, res) => {
     // Créer le webhook
     const webhook = await stripeFR.webhookEndpoints.create({
       url: webhookUrl,
-      enabled_events: ['checkout.session.completed'],
+      enabled_events: ['checkout.session.completed', 'checkout.session.async_payment_succeeded'],
       description: 'Webhook Klarna ACHZOD - Notifications commandes'
     });
     

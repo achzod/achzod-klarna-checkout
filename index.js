@@ -81,10 +81,16 @@ const ALLOWED_ORIGINS = new Set([
   'https://achzodcoaching.com',
   'https://www.achzodcoaching.com',
 ]);
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    return res.status(403).json({ error: 'Origin non autorisée' });
+  }
+  next();
+});
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
-    return callback(new Error('Origin non autorisée'));
+    return callback(null, !origin || ALLOWED_ORIGINS.has(origin));
   },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Stripe-Signature', 'Authorization', 'X-Checkout-Attempt'],

@@ -104,16 +104,72 @@ function resolvePromotion(items, subtotalCents, clientTotalCents, requestedCode)
   return matches[0];
 }
 
-function recoverSingleItemCart(item, clientTotalCents, requestedCode) {
+function quantityAssignmentsForSubtotal(items, targetSubtotalCents) {
   const matches = [];
-  for (let quantity = 1; quantity <= 10; quantity += 1) {
-    const candidate = [{ ...item, quantity }];
-    const subtotalCents = item.amount * quantity;
-    try {
-      const promotion = resolvePromotion(candidate, subtotalCents, clientTotalCents, requestedCode);
-      matches.push({ items: candidate, subtotalCents, ...promotion });
-    } catch (error) {
-      if (!(error instanceof CheckoutValidationError)) throw error;
+  const suffixMinimum = new Array(items.length + 1).fill(0);
+  const suffixMaximum = new Array(items.length + 1).fill(0);
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    suffixMinimum[index] = suffixMinimum[index + 1] + items[index].amount;
+    suffixMaximum[index] = suffixMaximum[index + 1] + items[index].amount * 10;
+  }
+
+  function visit(index, remainingCents, quantities) {
+    if (matches.length > 1) return;
+    if (index === items.length) {
+      if (remainingCents === 0) matches.push(quantities.slice());
+      return;
+    }
+    const item = items[index];
+    for (let quantity = 1; quantity <= 10; quantity += 1) {
+      const nextRemaining = remainingCents - item.amount * quantity;
+      if (nextRemaining < suffixMinimum[index + 1]) break;
+      if (nextRemaining > suffixMaximum[index + 1]) continue;
+      quantities.push(quantity);
+      visit(index + 1, nextRemaining, quantities);
+      quantities.pop();
+      if (matches.length > 1) return;
+    }
+  }
+  if (targetSubtotalCents >= suffixMinimum[0] && targetSubtotalCents <= suffixMaximum[0]) {
+    visit(0, targetSubtotalCents, []);
+  }
+  return matches;
+}
+
+function possibleSubtotalsForPromotion(clientTotalCents, promotion) {
+  if (!promotion) return [clientTotalCents];
+  if (promotion.amountOff) return [clientTotalCents + promotion.amountOff];
+  if (promotion.percentOff === 50) return [clientTotalCents * 2 - 1, clientTotalCents * 2];
+  return [];
+}
+
+function recoverCartQuantities(items, clientTotalCents, requestedCode) {
+  const promotionCandidates = requestedCode
+    ? [PROMOTIONS[requestedCode]].filter(Boolean)
+    : [null, ...Object.values(PROMOTIONS)];
+  const matches = [];
+  const fingerprints = new Set();
+
+  for (const promotionCandidate of promotionCandidates) {
+    for (const targetSubtotalCents of possibleSubtotalsForPromotion(clientTotalCents, promotionCandidate)) {
+      if (!Number.isSafeInteger(targetSubtotalCents) || targetSubtotalCents <= 0) continue;
+      const assignments = quantityAssignmentsForSubtotal(items, targetSubtotalCents);
+      for (const quantities of assignments) {
+        const candidateItems = items.map((item, index) => ({ ...item, quantity: quantities[index] }));
+        const subtotalCents = candidateItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+        try {
+          const code = promotionCandidate ? promotionCandidate.code : '';
+          const promotion = resolvePromotion(candidateItems, subtotalCents, clientTotalCents, code);
+          const fingerprint = `${candidateItems.map((item) => item.quantity).join(',')}|${promotion.promotionCode || ''}`;
+          if (!fingerprints.has(fingerprint)) {
+            fingerprints.add(fingerprint);
+            matches.push({ items: candidateItems, subtotalCents, ...promotion });
+          }
+        } catch (error) {
+          if (!(error instanceof CheckoutValidationError)) throw error;
+        }
+        if (matches.length > 1) return null;
+      }
     }
   }
   return matches.length === 1 ? matches[0] : null;
@@ -164,23 +220,22 @@ function validateAndPriceCart(body) {
   try {
     promotion = resolvePromotion(effectiveItems, subtotalCents, clientTotalCents, requestedCode);
   } catch (error) {
-    // L’ancien bouton Webflow envoyait toujours quantity: 1. Pour un panier
-    // mono-produit, on peut retrouver sans ambiguïté la quantité et la remise
-    // à partir des seuls prix catalogue et codes autorisés.
-    const recovered = clientTotalCents !== null && effectiveItems.length === 1
-      ? recoverSingleItemCart(effectiveItems[0], clientTotalCents, requestedCode)
+    // Les anciens boutons Webflow peuvent envoyer des quantités fausses depuis
+    // leur cookie de secours. On reconstruit alors toutes les lignes à partir
+    // du total affiché, des prix catalogue et des seules promotions autorisées.
+    // La réparation n’est acceptée que si une seule combinaison est possible.
+    const recovered = clientTotalCents !== null
+      ? recoverCartQuantities(effectiveItems, clientTotalCents, requestedCode)
       : null;
     if (recovered) {
       effectiveItems = recovered.items;
       subtotalCents = recovered.subtotalCents;
       promotion = recovered;
     } else {
-      // Les anciens scripts Webflow peuvent lire le mauvais noeud de total sur
-      // un panier composé de plusieurs coachings. Les lignes produit restent
-      // fiables et sont toujours recalculées avec le catalogue serveur. Dans ce
-      // cas précis, ignorer le total erroné ne permet jamais de réduire le prix:
-      // Stripe reçoit le prix catalogue complet. Un code explicitement envoyé,
-      // un ebook ou une quantité autre que 1 restent strictement bloqués.
+      // Les anciens scripts Webflow peuvent aussi lire le mauvais noeud de total
+      // sur un panier composé de plusieurs coachings. Les lignes produit restent
+      // recalculées avec le catalogue serveur. Ignorer ce total ne permet jamais
+      // de réduire le prix: Stripe reçoit le prix catalogue complet.
       const safeLegacyMixedCoachingCart = !requestedCode
         && clientTotalCents !== null
         && effectiveItems.length > 1

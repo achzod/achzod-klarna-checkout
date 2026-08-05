@@ -6,6 +6,7 @@
   var API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout-klarna';
   var BUTTON_ID = 'achzod-klarna-checkout';
   var LEGACY_IDS = ['klarna-fixed-btn', 'ac-klarna-fixed', 'ac-klarna-btn'];
+  var PROMO_STORAGE_KEY = 'achzod_klarna_promo';
 
   function parseEuro(value) {
     var text = String(value || '').replace(/\u00a0/g, ' ');
@@ -60,6 +61,36 @@
     }
   }
 
+  function normalizePromotionCode(value) {
+    return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
+  }
+
+  function rememberPromotionCode() {
+    var input = document.querySelector('[data-node-type="commerce-checkout-discount-input"]');
+    var code = normalizePromotionCode(input ? input.value : '');
+    try {
+      if (code) sessionStorage.setItem(PROMO_STORAGE_KEY, code);
+      else sessionStorage.removeItem(PROMO_STORAGE_KEY);
+    } catch (_) {}
+  }
+
+  function readPromotionCode() {
+    try {
+      return normalizePromotionCode(sessionStorage.getItem(PROMO_STORAGE_KEY));
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function trackPromotionForm() {
+    try { sessionStorage.removeItem(PROMO_STORAGE_KEY); } catch (_) {}
+    var form = document.querySelector('[data-node-type="commerce-checkout-discount-form"]');
+    if (!form) return;
+    form.addEventListener('submit', rememberPromotionCode, true);
+    var button = form.querySelector('button');
+    if (button) button.addEventListener('click', rememberPromotionCode, true);
+  }
+
   function readPayload() {
     var items = readDomItems();
     if (!items.length) items = readBackupItems();
@@ -73,6 +104,8 @@
       cancelUrl: 'https://achzodcoaching.com/checkout',
     };
     if (totalAmount) payload.totalAmount = totalAmount;
+    var discountCode = readPromotionCode();
+    if (discountCode) payload.discountCode = discountCode;
     return payload;
   }
 
@@ -98,6 +131,7 @@
   function mount() {
     removeLegacyButtons();
     if (document.getElementById(BUTTON_ID)) return;
+    trackPromotionForm();
 
     var wrap = document.createElement('div');
     wrap.id = BUTTON_ID;

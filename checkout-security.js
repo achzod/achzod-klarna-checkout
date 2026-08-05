@@ -95,10 +95,9 @@ function validateAndPriceCart(body) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
       throw new CheckoutValidationError(`Quantité invalide pour ${product.name}`);
     }
-    // Prix unitaire : on privilégie le prix envoyé par le front (Webflow reste la
-    // source de vérité côté affichage). Le prix catalogue sert de fallback si le
-    // front n'envoie rien. Toute valeur farfelue est clampée dans une fourchette
-    // raisonnable pour éviter les abus.
+    // Prix unitaire : Webflow est source de vérité (les prix affichés peuvent
+    // avoir été mis à jour côté site sans update backend). Fallback catalogue.
+    // Bornes raisonnables pour éviter les abus flagrants.
     const clientCents = toCentsFromNumber(item.price);
     let unitAmount = clientCents !== null ? clientCents : product.amount;
     if (unitAmount < MIN_UNIT_PRICE_CENTS) unitAmount = MIN_UNIT_PRICE_CENTS;

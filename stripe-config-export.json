@@ -163,15 +163,6 @@
       "type": "service"
     },
     {
-      "id": "prod_TV9IKx5NRoIZrZ",
-      "name": "Coaching Starter",
-      "description": "Formule Starter - Accompagnement coaching",
-      "active": true,
-      "metadata": {},
-      "images": [],
-      "type": "service"
-    },
-    {
       "id": "prod_TV8SHVf4h6aVEf",
       "name": "Pack 3 analyses - Bilan Sanguin",
       "description": "3 analyses complètes IA avec suivi trimestriel",
@@ -377,17 +368,6 @@
       "product_name": "Essential 4 semaines",
       "currency": "eur",
       "unit_amount": 24900,
-      "recurring": null,
-      "type": "one_time",
-      "active": true,
-      "metadata": {}
-    },
-    {
-      "id": "price_1SY91lINPqlywHW9WSRtSqRk",
-      "product_id": "prod_TV9IKx5NRoIZrZ",
-      "product_name": "Coaching Starter",
-      "currency": "eur",
-      "unit_amount": 14900,
       "recurring": null,
       "type": "one_time",
       "active": true,

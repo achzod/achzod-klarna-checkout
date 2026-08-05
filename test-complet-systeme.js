@@ -35,7 +35,6 @@ const PRODUITS_TEST = [
   
   // Coaching (pas d'ebook)
   { name: 'Coaching sans suivi', price: 99.00, expectedEbook: null },
-  { name: 'Starter', price: 149.00, expectedEbook: null },
 ];
 
 // Résultats des tests
@@ -422,4 +421,3 @@ runAllTests().catch(error => {
   console.error(error);
   process.exit(1);
 });
-

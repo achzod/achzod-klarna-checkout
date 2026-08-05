@@ -515,6 +515,14 @@
   // Payload checkout : priorité aux sauvegardes locales, puis DOM checkout, puis panier ouvert
   function getCheckoutPayload(){
     var items = [];
+    function extractCheckoutQuantity(el) {
+      if (!el) return 1;
+      var qtyEl = el.querySelector('.w-commerce-commercecheckoutorderitemquantitywrapper');
+      var qtyText = qtyEl ? qtyEl.innerText : el.innerText;
+      var qtyMatch = qtyText.match(/Qt[ée]\s*:\s*(\d+)/i) || qtyText.match(/\bqty\b\s*:\s*(\d+)/i);
+      var quantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+      return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    }
 
     // 1) LocalStorage en priorité (fiable même si DOM vide)
     if (window.getAchzodCartBackup) {
@@ -532,8 +540,9 @@
         var priceEl = el.querySelector('.w-commerce-commercecheckoutorderitemprice');
         var name = nameEl ? nameEl.innerText.trim() : 'Produit';
         var price = parseEuro(priceEl ? priceEl.innerText : el.innerText);
+        var quantity = extractCheckoutQuantity(el);
         if (price && price > 0){
-          items.push({ name: name.substring(0,80), price: price, quantity: 1 });
+          items.push({ name: name.substring(0,80), price: price, quantity: quantity });
         }
       });
     }

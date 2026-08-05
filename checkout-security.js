@@ -54,6 +54,34 @@ class CheckoutValidationError extends Error {
   }
 }
 
+function recoverImplicitSingleItemQuantity(pricedItems, body) {
+  if (!body || body.totalAmount === undefined || body.totalAmount === null || body.totalAmount === '') {
+    return null;
+  }
+  if (pricedItems.length !== 1) return null;
+  if (body.items.some((item) => item && item.quantity !== undefined && item.quantity !== null && item.quantity !== '')) {
+    return null;
+  }
+
+  const item = pricedItems[0];
+  const clientTotal = Number(body.totalAmount);
+  if (!Number.isFinite(clientTotal) || clientTotal <= 0) {
+    return null;
+  }
+
+  const clientTotalCents = Math.round(clientTotal * 100);
+  if (!Number.isSafeInteger(clientTotalCents)) {
+    return null;
+  }
+
+  const recoveredQuantity = clientTotalCents / item.amount;
+  if (!Number.isSafeInteger(recoveredQuantity) || recoveredQuantity < 1 || recoveredQuantity > 10) {
+    return null;
+  }
+
+  return [{ ...item, quantity: recoveredQuantity }];
+}
+
 function validateAndPriceCart(body) {
   if (!body || !Array.isArray(body.items) || body.items.length === 0) {
     throw new CheckoutValidationError('Panier vide');
@@ -78,7 +106,8 @@ function validateAndPriceCart(body) {
     return { ...product, quantity };
   });
 
-  const totalCents = pricedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+  let effectiveItems = pricedItems;
+  let totalCents = effectiveItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
   if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
     throw new CheckoutValidationError('Total du panier invalide');
   }
@@ -86,16 +115,28 @@ function validateAndPriceCart(body) {
   // Les montants et codes venant du navigateur ne sont jamais une source de prix.
   // Un total transmis est accepté seulement s'il correspond exactement au catalogue.
   if (body.totalAmount !== undefined && body.totalAmount !== null && body.totalAmount !== '') {
-    const clientTotalCents = Math.round(Number(body.totalAmount) * 100);
-    if (!Number.isFinite(Number(body.totalAmount)) || clientTotalCents !== totalCents) {
+    const clientTotal = Number(body.totalAmount);
+    const clientTotalCents = Math.round(clientTotal * 100);
+    if (!Number.isFinite(clientTotal)) {
       throw new CheckoutValidationError('Le total transmis ne correspond pas au prix catalogue');
+    }
+    if (clientTotalCents !== totalCents) {
+      const recoveredItems = recoverImplicitSingleItemQuantity(effectiveItems, body);
+      if (!recoveredItems) {
+        throw new CheckoutValidationError('Le total transmis ne correspond pas au prix catalogue');
+      }
+      effectiveItems = recoveredItems;
+      totalCents = effectiveItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+      if (clientTotalCents !== totalCents) {
+        throw new CheckoutValidationError('Le total transmis ne correspond pas au prix catalogue');
+      }
     }
   }
   if (body.discountCode) {
     throw new CheckoutValidationError('Ce code promo doit être validé côté serveur');
   }
 
-  return { items: pricedItems, totalCents };
+  return { items: effectiveItems, totalCents };
 }
 
 function buildLineItems(body, useStripePriceIds) {

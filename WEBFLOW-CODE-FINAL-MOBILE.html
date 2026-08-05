@@ -170,14 +170,23 @@
 
   function getCheckoutPayload(){
     var items = [];
+    function extractCheckoutQuantity(el) {
+      if (!el) return 1;
+      var qtyEl = el.querySelector('.w-commerce-commercecheckoutorderitemquantitywrapper');
+      var qtyText = qtyEl ? qtyEl.innerText : el.innerText;
+      var qtyMatch = qtyText.match(/Qt[ée]\s*:\s*(\d+)/i) || qtyText.match(/\bqty\b\s*:\s*(\d+)/i);
+      var quantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+      return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    }
     var els = document.querySelectorAll('.w-commerce-commercecheckoutorderitem');
     for (var i=0;i<els.length;i++){
       var nameEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemdescriptionwrapper');
       var priceEl = els[i].querySelector('.w-commerce-commercecheckoutorderitemprice');
       var name = nameEl ? nameEl.innerText.trim() : 'Produit';
       var price = parseEuro(priceEl ? priceEl.innerText : els[i].innerText);
+      var quantity = extractCheckoutQuantity(els[i]);
       if (price && price > 0){
-        items.push({ name: name.substring(0,80), price: price, quantity: 1 });
+        items.push({ name: name.substring(0,80), price: price, quantity: quantity });
       }
     }
     var totalEl = document.querySelector('.w-commerce-commercecheckoutsummarytotal');
@@ -191,7 +200,7 @@
       cancelUrl: 'https://achzodcoaching.com/checkout'
     };
     if (totalAmount && items.length){
-      var itemsTotal = items.reduce(function(sum,it){ return sum + (it.price||0); }, 0);
+      var itemsTotal = items.reduce(function(sum,it){ return sum + (it.price||0) * (it.quantity||1); }, 0);
       if (Math.abs(totalAmount - itemsTotal) > 1) payload.totalAmount = totalAmount;
     }
     return payload;
@@ -244,6 +253,5 @@
   obs.observe(document.documentElement, {subtree:true, childList:true});
 })();
 </script>
-
 
 

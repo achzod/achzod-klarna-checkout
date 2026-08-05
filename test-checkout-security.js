@@ -74,6 +74,16 @@ test('accepte les libellés checkout Webflow enrichis pour Klarna', () => {
   assert.equal(cart.items[0].name, 'Elite 8 semaines');
 });
 
+test('récupère une quantité implicite mono-produit depuis le total checkout', () => {
+  const cart = validateAndPriceCart({
+    totalAmount: 1298,
+    items: [{ name: 'COACHING ELITE € 649,00 EUR 8 semaines - ELITE', price: 649 }],
+  });
+  assert.equal(cart.totalCents, 129800);
+  assert.equal(cart.items[0].name, 'Elite 8 semaines');
+  assert.equal(cart.items[0].quantity, 2);
+});
+
 test('bloque un code promo non validé côté serveur', () => {
   rejects({ discountCode: 'FAUX99', items: [{ name: 'Starter' }] }, /validé côté serveur/);
 });

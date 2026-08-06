@@ -733,12 +733,52 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
 
 const fulfillmentInFlight = new Set();
 
+function getFulfillmentMetadata(session) {
+  const paymentIntent = session.payment_intent && typeof session.payment_intent === 'object'
+    ? session.payment_intent
+    : null;
+  return {
+    ...(paymentIntent?.metadata || {}),
+    ...(session.metadata || {}),
+  };
+}
+
+async function persistFulfillmentMetadata(stripe, session, patch) {
+  const paymentIntent = session.payment_intent && typeof session.payment_intent === 'object'
+    ? session.payment_intent
+    : null;
+  const mergedSessionMetadata = { ...(session.metadata || {}), ...patch };
+
+  if (typeof stripe.checkout.sessions.update === 'function') {
+    try {
+      const refreshed = await stripe.checkout.sessions.update(session.id, {
+        metadata: mergedSessionMetadata,
+      });
+      return { ...session, ...refreshed, metadata: refreshed.metadata || mergedSessionMetadata };
+    } catch (error) {
+      console.warn('Mise à jour metadata checkout.session impossible, fallback payment_intent:', error.message);
+    }
+  }
+
+  if (paymentIntent?.id) {
+    const refreshedIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+      metadata: { ...(paymentIntent.metadata || {}), ...patch },
+    });
+    return { ...session, payment_intent: refreshedIntent, metadata: mergedSessionMetadata };
+  }
+
+  throw new Error('Aucun support de persistence metadata pour cette session');
+}
+
 async function fulfillPaidCheckout(stripe, sessionId, paymentMethod) {
   if (fulfillmentInFlight.has(sessionId)) return { duplicate: true };
   fulfillmentInFlight.add(sessionId);
   try {
-    let session = await stripe.checkout.sessions.retrieve(sessionId);
+    let session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['payment_intent'],
+    });
     if (session.payment_status !== 'paid') return { pending: true };
+    let fulfillmentMetadata = getFulfillmentMetadata(session);
 
     const customerEmail = session.customer_details?.email || session.customer_email;
     const customerName = session.customer_details?.name || '';
@@ -756,24 +796,23 @@ async function fulfillPaidCheckout(stripe, sessionId, paymentMethod) {
       if (ebookData) ebooks.push(ebookData);
     }
 
-    if (!session.metadata?.admin_notification_sent_at) {
+    if (!fulfillmentMetadata.admin_notification_sent_at) {
       const sent = await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, paymentMethod);
       if (!sent) throw new Error('Notification vendeur non envoyée');
-      session = await stripe.checkout.sessions.update(sessionId, {
-        metadata: { ...session.metadata, admin_notification_sent_at: new Date().toISOString() },
+      session = await persistFulfillmentMetadata(stripe, session, {
+        admin_notification_sent_at: new Date().toISOString(),
       });
+      fulfillmentMetadata = getFulfillmentMetadata(session);
     }
 
-    if (!session.metadata?.customer_email_sent_at) {
+    if (!fulfillmentMetadata.customer_email_sent_at) {
       const sent = await sendCustomerOrderEmail(customerEmail, customerName, productNames, ebooks, totalAmount);
       if (!sent) throw new Error('Confirmation client non envoyée');
-      session = await stripe.checkout.sessions.update(sessionId, {
-        metadata: {
-          ...session.metadata,
-          customer_email_sent_at: new Date().toISOString(),
-          fulfillment_status: 'sent',
-        },
+      session = await persistFulfillmentMetadata(stripe, session, {
+        customer_email_sent_at: new Date().toISOString(),
+        fulfillment_status: 'sent',
       });
+      fulfillmentMetadata = getFulfillmentMetadata(session);
     }
     return { delivered: true };
   } finally {

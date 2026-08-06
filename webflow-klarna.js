@@ -200,6 +200,61 @@
     });
   }
 
+  async function openKlarnaCheckout(button, errorBox) {
+    if (button && button.disabled) return;
+
+    var payload;
+    try {
+      payload = await buildPayload();
+    } catch (_) {
+      payload = { items: [] };
+    }
+
+    if (!payload.items.length) {
+      if (errorBox) {
+        errorBox.textContent = 'Ton panier semble vide. Recharge la page puis réessaie.';
+        errorBox.style.display = 'block';
+      }
+      return;
+    }
+
+    var original = button ? button.innerHTML : '';
+    if (button) {
+      button.disabled = true;
+      button.style.opacity = '.72';
+      button.textContent = 'Ouverture de Klarna...';
+    }
+    if (errorBox) errorBox.style.display = 'none';
+
+    var attemptId = newAttemptId();
+    track('klarna_checkout_started', {
+      cart_quantity: payload.items.reduce(function (sum, item) { return sum + item.quantity; }, 0),
+    });
+
+    try {
+      var response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Checkout-Attempt': attemptId },
+        body: JSON.stringify(payload),
+      });
+      var data = await response.json().catch(function () { return {}; });
+      if (!response.ok || !data.url) throw new Error(data.error || 'Le paiement ne répond pas');
+      track('klarna_checkout_ready');
+      window.location.assign(data.url);
+    } catch (error) {
+      track('klarna_checkout_error', { message: String(error.message || 'unknown').slice(0, 120) });
+      if (errorBox) {
+        errorBox.textContent = String(error.message || 'Klarna est momentanément indisponible. Réessaie dans un instant.');
+        errorBox.style.display = 'block';
+      }
+      if (button) {
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.innerHTML = original;
+      }
+    }
+  }
+
   // Recharge complète du checkout Webflow quand la page revient du cache
   // (bouton retour navigateur, retour depuis Stripe/Klarna). Force la lecture
   // du panier réel côté serveur Webflow au lieu du snapshot mis en cache.
@@ -230,46 +285,11 @@
 
     var button = wrap.querySelector('button');
     var errorBox = wrap.querySelector('[role="alert"]');
-    button.addEventListener('click', async function () {
-      if (button.disabled) return;
-      var payload;
-      try {
-        payload = await buildPayload();
-      } catch (_) {
-        payload = { items: [] };
-      }
-      if (!payload.items.length) {
-        errorBox.textContent = 'Ton panier semble vide. Recharge la page puis réessaie.';
-        errorBox.style.display = 'block';
-        return;
-      }
-
-      var original = button.innerHTML;
-      button.disabled = true;
-      button.style.opacity = '.72';
-      button.textContent = 'Ouverture de Klarna...';
-      errorBox.style.display = 'none';
-      var attemptId = newAttemptId();
-      track('klarna_checkout_started', { cart_quantity: payload.items.reduce(function (sum, item) { return sum + item.quantity; }, 0) });
-
-      try {
-        var response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Checkout-Attempt': attemptId },
-          body: JSON.stringify(payload),
-        });
-        var data = await response.json().catch(function () { return {}; });
-        if (!response.ok || !data.url) throw new Error(data.error || 'Le paiement ne répond pas');
-        track('klarna_checkout_ready');
-        window.location.assign(data.url);
-      } catch (error) {
-        track('klarna_checkout_error', { message: String(error.message || 'unknown').slice(0, 120) });
-        errorBox.textContent = String(error.message || 'Klarna est momentanément indisponible. Réessaie dans un instant.');
-        errorBox.style.display = 'block';
-        button.disabled = false;
-        button.style.opacity = '1';
-        button.innerHTML = original;
-      }
+    window.klarnaGo = function () {
+      return openKlarnaCheckout(button, errorBox);
+    };
+    button.addEventListener('click', function () {
+      return openKlarnaCheckout(button, errorBox);
     });
   }
 

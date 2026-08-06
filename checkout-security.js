@@ -198,5 +198,6 @@ module.exports = {
   buildLineItems,
   normalizeProductName,
   normalizePromotionCode,
+  resolveProduct,
   validateAndPriceCart,
 };

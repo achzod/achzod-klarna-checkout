@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
-const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems } = require('./checkout-security');
+const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems, resolveProduct } = require('./checkout-security');
 const {
   CheckoutRequestError,
   buildCheckoutMetadata,
@@ -361,14 +361,71 @@ async function createKlarnaSession(req, res) {
 }
 app.post(['/checkout-klarna', '/create-klarna-session'], checkoutRateLimit, createKlarnaSession);
 
+function normalizeProductLabel(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const CANONICAL_EBOOK_LINKS = new Map([
+  ['Anabolic Code', 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf'],
+  ['Libérer son potentiel génétique', 'https://gofile.io/d/gWybQ6'],
+  ['4 semaines pour être SHRED', 'https://gofile.io/d/5SylgY'],
+  ['Bioénergétique et timing de la nutrition', 'https://gofile.io/d/Hn6GE1'],
+]);
+
+const GENERIC_MATCH_WORDS = new Set(['ebook', 'ebooks', 'semaines', 'semaine']);
+const GENERIC_EBOOK_KEYS = new Set([
+  '4 semaines',
+  '10 semaines',
+  'semaines shred',
+  'perte de gras',
+  'prise de muscles',
+  'shred',
+]);
+const NON_EBOOK_HINTS = [
+  'coaching',
+  'suivi',
+  'essential',
+  'elite',
+  'private lab',
+  'starter',
+  'consultation',
+  'bilan sanguin',
+  'analyse',
+];
+
 // Fonction pour trouver le lien ebook
 function findEbookLink(productName) {
   if (!productName) return null;
-  
-  const cleanName = productName.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
-    .trim();
+
+  const resolvedProduct = resolveProduct(productName);
+  if (resolvedProduct) {
+    if (resolvedProduct.kind !== 'ebook') {
+      console.log('⛔ Produit non ebook exclu de la détection ebook:', productName, '->', resolvedProduct.name);
+      return null;
+    }
+
+    const canonicalLink = CANONICAL_EBOOK_LINKS.get(resolvedProduct.name);
+    if (canonicalLink) {
+      console.log('✅ Ebook catalogue trouvé:', resolvedProduct.name, '->', canonicalLink);
+      return { name: resolvedProduct.name, link: canonicalLink };
+    }
+  }
+
+  if (isCoachingProduct(productName)) {
+    console.log('⛔ Produit coaching exclu de la détection ebook:', productName);
+    return null;
+  }
+
+  const cleanName = normalizeProductLabel(productName);
+  if (NON_EBOOK_HINTS.some((hint) => cleanName.includes(hint))) {
+    console.log('⛔ Libellé non ebook exclu de la détection ebook:', productName);
+    return null;
+  }
   
   console.log('🔍 Recherche ebook pour:', productName, '-> nettoyé:', cleanName);
   
@@ -377,19 +434,17 @@ function findEbookLink(productName) {
   const sortedKeys = Object.keys(EBOOK_LINKS).sort((a, b) => b.length - a.length);
   
   for (const key of sortedKeys) {
-    const cleanKey = key.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s]/g, '')
-      .trim();
+    const cleanKey = normalizeProductLabel(key);
+    const isGenericKey = GENERIC_EBOOK_KEYS.has(cleanKey);
     
     // Correspondance si le nom contient la clé ou vice versa
     // On vérifie aussi les mots-clés individuels pour plus de flexibilité
-    const nameWords = cleanName.split(/\s+/).filter(w => w.length > 2);
-    const keyWords = cleanKey.split(/\s+/).filter(w => w.length > 2);
+    const nameWords = cleanName.split(/\s+/).filter((w) => w.length > 2 && !GENERIC_MATCH_WORDS.has(w));
+    const keyWords = cleanKey.split(/\s+/).filter((w) => w.length > 2 && !GENERIC_MATCH_WORDS.has(w));
     
     const hasFullMatch = cleanName.includes(cleanKey) || cleanKey.includes(cleanName);
-    const hasWordMatch = nameWords.length > 0 && keyWords.length > 0 && 
-      nameWords.some(nw => keyWords.some(kw => nw.includes(kw) || kw.includes(nw)));
+    const sharedWordCount = nameWords.filter((nw) => keyWords.some((kw) => nw.includes(kw) || kw.includes(nw))).length;
+    const hasWordMatch = sharedWordCount >= 2;
     
     // Pour "shred", "perte de gras", "prise de muscles" - correspondance plus flexible
     const isShredRelated = (cleanName.includes('shred') || cleanName.includes('perte') || cleanName.includes('gras') || cleanName.includes('muscles')) &&
@@ -399,6 +454,10 @@ function findEbookLink(productName) {
     const isEbookShred = cleanName.includes('ebook') && (cleanName.includes('shred') || cleanName.includes('4 semaines') || cleanName.includes('semaines')) &&
                         (cleanKey.includes('shred') || cleanKey.includes('4 semaines') || cleanKey.includes('semaines'));
     
+    if (isGenericKey && !isEbookShred && !cleanName.includes('shred')) {
+      continue;
+    }
+
     if (hasFullMatch || (hasWordMatch && nameWords.length >= 2) || isShredRelated || isEbookShred) {
       console.log('✅ Ebook trouvé:', key, '->', EBOOK_LINKS[key]);
       return { name: productName, link: EBOOK_LINKS[key] };
@@ -609,9 +668,8 @@ function escapeHtml(value) {
 }
 
 function isCoachingProduct(productName) {
-  const normalized = String(productName || '').toLowerCase();
-  return PRODUCTS.some((product) => product.kind === 'coaching' &&
-    product.aliases.some((alias) => normalized.includes(alias)));
+  const resolvedProduct = resolveProduct(productName);
+  return resolvedProduct?.kind === 'coaching';
 }
 
 function generateCoachingEmailHTML(customerName, products, ebooks, totalAmount) {
@@ -929,8 +987,9 @@ app.get('/order-data', async (req, res) => {
                           item.price?.product?.description ||
                           item.price?.nickname ||
                           'Produit';
-      const price = (item.amount_total / 100).toFixed(2);
-      const quantity = item.quantity;
+      const quantity = item.quantity || 1;
+      const unitAmountCents = item.price?.unit_amount || Math.round(item.amount_total / quantity);
+      const price = (unitAmountCents / 100).toFixed(2);
       
       productNames.push(productName);
       items.push({
@@ -1288,6 +1347,15 @@ app.get('/recent-events-fr', requireDiagnosticAuth, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = {
+  app,
+  findEbookLink,
+  isCoachingProduct,
+  normalizeProductLabel,
+};

@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node test-checkout-security.js && node test-checkout-runtime.js",
+    "test": "node test-checkout-security.js && node test-checkout-runtime.js && node test-order-matching.js",
+    "test:routing": "node test-order-matching.js && node test-product-routing.js",
     "test:live": "node test-complet-systeme.js"
   },
   "dependencies": {

@@ -781,6 +781,31 @@ async function fulfillPaidCheckout(stripe, sessionId, paymentMethod) {
   }
 }
 
+function paymentMethodLabelForReplay(account) {
+  return account === 'fr' ? 'Klarna (replay)' : 'Stripe (replay)';
+}
+
+async function resolveCheckoutSessionForReplay(sessionId, preferredAccount = 'auto') {
+  const candidates = preferredAccount === 'fr'
+    ? [{ key: 'fr', stripe: stripeFR }]
+    : preferredAccount === 'uae'
+      ? [{ key: 'uae', stripe: stripeUAE }]
+      : [{ key: 'uae', stripe: stripeUAE }, { key: 'fr', stripe: stripeFR }];
+
+  let lastError = null;
+  for (const candidate of candidates) {
+    if (!candidate.stripe) continue;
+    try {
+      const session = await candidate.stripe.checkout.sessions.retrieve(sessionId);
+      return { account: candidate.key, stripe: candidate.stripe, session };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Session Stripe introuvable');
+}
+
 function registerStripeWebhook(path, stripe, secretName, paymentMethod) {
   app.post(path, async (req, res) => {
     const secret = process.env[secretName];
@@ -1153,37 +1178,46 @@ app.get('/replay-event', requireDiagnosticAuth, async (req, res) => {
     }
 
     const session = event.data.object;
-    const fullSession = await stripeFR.checkout.sessions.retrieve(session.id, {
-      expand: ['line_items', 'customer_details'],
-    });
-    const customerEmail = fullSession.customer_details?.email || session.customer_email;
-    const customerName = fullSession.customer_details?.name || '';
-    const totalAmount = (fullSession.amount_total / 100).toFixed(2);
-    if (!customerEmail) return res.status(400).json({ error: 'Pas d\'email client sur cet event' });
-
-    const lineItems = await stripeFR.checkout.sessions.listLineItems(session.id);
-    const ebooks = [];
-    const productNames = [];
-    for (const item of lineItems.data) {
-      const productName = item.description || item.price?.product?.name || item.price?.nickname || 'Produit';
-      productNames.push(productName);
-      const ebookData = findEbookLink(productName);
-      if (ebookData) ebooks.push(ebookData);
-    }
-
-    const notifSent = await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, 'Klarna (replay)');
-    const ebookSent = await sendEbookEmail(customerEmail, customerName, ebooks, totalAmount);
+    const replay = await fulfillPaidCheckout(stripeFR, session.id, paymentMethodLabelForReplay('fr'));
+    const refreshed = await stripeFR.checkout.sessions.retrieve(session.id);
 
     res.json({
       status: 'REPLAYED',
       event_id: eventId,
-      customer_email: customerEmail,
-      customer_name: customerName,
-      amount: totalAmount,
-      products: productNames,
-      ebooks_found: ebooks.length,
-      vendor_notif_sent: notifSent,
-      customer_email_sent: ebookSent,
+      session_id: session.id,
+      replay,
+      metadata: refreshed.metadata,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Diag: rejouer proprement le fulfillment complet d'une session Stripe par session_id
+app.get('/replay-session', requireDiagnosticAuth, async (req, res) => {
+  try {
+    const sessionId = String(req.query.session_id || '').trim();
+    const account = String(req.query.account || 'auto').trim().toLowerCase();
+    if (!sessionId) return res.status(400).json({ error: 'Paramètre ?session_id=cs_xxx requis' });
+    if (!['auto', 'uae', 'fr'].includes(account)) {
+      return res.status(400).json({ error: 'Paramètre ?account=auto|uae|fr invalide' });
+    }
+
+    const resolved = await resolveCheckoutSessionForReplay(sessionId, account);
+    const replay = await fulfillPaidCheckout(
+      resolved.stripe,
+      sessionId,
+      paymentMethodLabelForReplay(resolved.account),
+    );
+    const refreshed = await resolved.stripe.checkout.sessions.retrieve(sessionId);
+
+    res.json({
+      status: 'REPLAYED',
+      session_id: sessionId,
+      account: resolved.account,
+      replay,
+      payment_status: refreshed.payment_status,
+      metadata: refreshed.metadata,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

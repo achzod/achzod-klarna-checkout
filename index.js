@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
+const { randomUUID } = require('node:crypto');
+const { MemoryFulfillmentStore, RedisFulfillmentStore } = require('./fulfillment-store');
 const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems, resolveProduct } = require('./checkout-security');
 const {
   CheckoutRequestError,
@@ -43,11 +45,34 @@ const stripeFR = process.env.STRIPE_SECRET_KEY_FR ? new Stripe(process.env.STRIP
 // Configuration email (Gmail)
 const transporter = nodemailer.createTransport({
   service: 'gmail',
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
   auth: {
     user: process.env.EMAIL_USER || 'achzodyt@gmail.com',
     pass: process.env.EMAIL_PASS // App password Gmail
   }
 });
+
+const SMTP_SEND_TIMEOUT_MS = 25_000;
+
+async function sendMailWithTimeout(mailOptions, timeoutMs = SMTP_SEND_TIMEOUT_MS) {
+  let timer;
+  try {
+    return await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error(`Timeout SMTP après ${timeoutMs} ms`);
+          error.code = 'SMTP_TIMEOUT';
+          reject(error);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Liens de téléchargement des ebooks
 const EBOOK_LINKS = {
@@ -649,7 +674,7 @@ async function sendEbookEmail(customerEmail, customerName, ebooks, totalAmount) 
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await sendMailWithTimeout(mailOptions);
     console.log('Email envoyé à:', customerEmail);
     return true;
   } catch (error) {
@@ -699,7 +724,7 @@ async function sendCustomerOrderEmail(customerEmail, customerName, products, ebo
     return sendEbookEmail(customerEmail, customerName, ebooks, totalAmount);
   }
   try {
-    await transporter.sendMail({
+    await sendMailWithTimeout({
       from: {
         name: 'AchzodCoaching',
         address: process.env.EMAIL_USER || 'achzodyt@gmail.com',
@@ -717,7 +742,7 @@ async function sendCustomerOrderEmail(customerEmail, customerName, products, ebo
 }
 
 // Fonction pour envoyer une notification à Achzod pour chaque commande Klarna
-async function sendOrderNotification(customerEmail, customerName, products, totalAmount, paymentMethod) {
+async function sendOrderNotification(customerEmail, customerName, products, totalAmount, paymentMethod, notificationId) {
   const safeCustomerEmail = escapeHtml(customerEmail);
   const safeCustomerName = escapeHtml(customerName || 'Non renseigné');
   const safeProducts = products.map(escapeHtml);
@@ -776,11 +801,16 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
     },
     to: adminEmail,
     subject: `💰 Vente Klarna: ${totalAmount}€ - ${products[0] || 'Produit'}`,
-    html: htmlNotification
+    html: htmlNotification,
+    // Défense supplémentaire côté SMTP/Gmail. La vérité d'idempotence reste le
+    // claim Stripe, mais un replay exceptionnel garde aussi le même Message-ID.
+    messageId: notificationId
+      ? `<vente-${String(notificationId).replace(/[^a-zA-Z0-9_.-]/g, '_')}@achzodcoaching.com>`
+      : undefined,
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await sendMailWithTimeout(mailOptions);
     console.log('Notification envoyée à', adminEmail);
     return true;
   } catch (error) {
@@ -789,93 +819,249 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
   }
 }
 
-const fulfillmentInFlight = new Set();
+const DEFAULT_ACHZODLAB_PRICE_IDS = ['price_1SYP2XINPqlywHW9cRnHOUmq'];
+let defaultFulfillmentStore = null;
+
+function getDefaultFulfillmentStore() {
+  if (defaultFulfillmentStore) return defaultFulfillmentStore;
+  if (process.env.REDIS_URL) {
+    defaultFulfillmentStore = new RedisFulfillmentStore(process.env.REDIS_URL);
+    return defaultFulfillmentStore;
+  }
+  if (process.env.NODE_ENV === 'test') {
+    defaultFulfillmentStore = new MemoryFulfillmentStore();
+    return defaultFulfillmentStore;
+  }
+  throw new Error('REDIS_URL obligatoire pour une livraison webhook atomique en production');
+}
+
+function getAchzodLabPriceIds(env = process.env) {
+  return new Set(String(env.ACHZODLAB_PRICE_IDS || DEFAULT_ACHZODLAB_PRICE_IDS.join(','))
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => /^price_[a-zA-Z0-9]+$/.test(value)));
+}
+
+function asExpandedStripeObject(value) {
+  return value && typeof value === 'object' ? value : null;
+}
+
+function getFulfillmentStore(session) {
+  const invoice = asExpandedStripeObject(session.invoice);
+  const paymentIntent = asExpandedStripeObject(session.payment_intent);
+  const subscription = asExpandedStripeObject(session.subscription);
+
+  if (invoice?.id) return { type: 'invoice', object: invoice };
+  if (paymentIntent?.id) return { type: 'payment_intent', object: paymentIntent };
+  if (subscription?.id) return { type: 'subscription', object: subscription };
+  return { type: 'checkout_session', object: session };
+}
+
+function getFulfillmentIdentity(session) {
+  const store = getFulfillmentStore(session);
+  return `${store.type}:${store.object.id}`;
+}
 
 function getFulfillmentMetadata(session) {
-  const paymentIntent = session.payment_intent && typeof session.payment_intent === 'object'
-    ? session.payment_intent
-    : null;
+  const store = getFulfillmentStore(session);
   return {
-    ...(paymentIntent?.metadata || {}),
+    ...(store.object?.metadata || {}),
     ...(session.metadata || {}),
   };
 }
 
-async function persistFulfillmentMetadata(stripe, session, patch) {
-  const paymentIntent = session.payment_intent && typeof session.payment_intent === 'object'
-    ? session.payment_intent
-    : null;
-  const mergedSessionMetadata = { ...(session.metadata || {}), ...patch };
-
-  if (typeof stripe.checkout.sessions.update === 'function') {
-    try {
-      const refreshed = await stripe.checkout.sessions.update(session.id, {
-        metadata: mergedSessionMetadata,
-      });
-      return { ...session, ...refreshed, metadata: refreshed.metadata || mergedSessionMetadata };
-    } catch (error) {
-      console.warn('Mise à jour metadata checkout.session impossible, fallback payment_intent:', error.message);
+async function expandFulfillmentStore(stripe, session) {
+  const expanded = { ...session };
+  for (const [field, resource] of [
+    ['invoice', stripe.invoices],
+    ['payment_intent', stripe.paymentIntents],
+    ['subscription', stripe.subscriptions],
+  ]) {
+    if (typeof expanded[field] === 'string' && typeof resource?.retrieve === 'function') {
+      expanded[field] = await resource.retrieve(expanded[field]);
     }
+    if (asExpandedStripeObject(expanded[field])?.id) break;
   }
-
-  if (paymentIntent?.id) {
-    const refreshedIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-      metadata: { ...(paymentIntent.metadata || {}), ...patch },
-    });
-    return { ...session, payment_intent: refreshedIntent, metadata: mergedSessionMetadata };
-  }
-
-  throw new Error('Aucun support de persistence metadata pour cette session');
+  return expanded;
 }
 
-async function fulfillPaidCheckout(stripe, sessionId, paymentMethod) {
-  if (fulfillmentInFlight.has(sessionId)) return { duplicate: true };
-  fulfillmentInFlight.add(sessionId);
-  try {
-    let session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['payment_intent'],
-    });
-    if (session.payment_status !== 'paid') return { pending: true };
-    let fulfillmentMetadata = getFulfillmentMetadata(session);
-
-    const customerEmail = session.customer_details?.email || session.customer_email;
-    const customerName = session.customer_details?.name || '';
-    const totalAmount = session.amount_total ? (session.amount_total / 100).toFixed(2) : '0.00';
-    if (!customerEmail) throw new Error('Email client absent sur une commande payée');
-
-    const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 100 });
-    const ebooks = [];
-    const productNames = [];
-    for (const item of lineItems.data) {
-      const rawName = item.description || item.price?.nickname || 'Produit';
-      const displayName = item.quantity > 1 ? `${rawName} x${item.quantity}` : rawName;
-      productNames.push(displayName);
-      const ebookData = findEbookLink(rawName);
-      if (ebookData) ebooks.push(ebookData);
-    }
-
-    if (!fulfillmentMetadata.admin_notification_sent_at) {
-      const sent = await sendOrderNotification(customerEmail, customerName, productNames, totalAmount, paymentMethod);
-      if (!sent) throw new Error('Notification vendeur non envoyée');
-      session = await persistFulfillmentMetadata(stripe, session, {
-        admin_notification_sent_at: new Date().toISOString(),
-      });
-      fulfillmentMetadata = getFulfillmentMetadata(session);
-    }
-
-    if (!fulfillmentMetadata.customer_email_sent_at) {
-      const sent = await sendCustomerOrderEmail(customerEmail, customerName, productNames, ebooks, totalAmount);
-      if (!sent) throw new Error('Confirmation client non envoyée');
-      session = await persistFulfillmentMetadata(stripe, session, {
-        customer_email_sent_at: new Date().toISOString(),
-        fulfillment_status: 'sent',
-      });
-      fulfillmentMetadata = getFulfillmentMetadata(session);
-    }
-    return { delivered: true };
-  } finally {
-    fulfillmentInFlight.delete(sessionId);
+async function deliverClaimedSideEffect({
+  store,
+  identity,
+  effect,
+  send,
+  failureMessage,
+  now,
+}) {
+  const key = `${identity}:${effect}`;
+  const owner = randomUUID();
+  const nowMs = now().getTime();
+  const claim = await store.claim({ key, owner, nowMs });
+  if (claim.status !== 'acquired') {
+    console.info(JSON.stringify({
+      component: 'stripe_webhook',
+      event: 'side_effect_duplicate_skipped',
+      key,
+    }));
+    return { skipped: true, reason: 'already_claimed' };
   }
+
+  try {
+    const sent = await send();
+    if (!sent) throw new Error(failureMessage);
+    console.info(JSON.stringify({
+      component: 'stripe_webhook',
+      event: 'side_effect_delivered',
+      key,
+    }));
+    return { delivered: true };
+  } catch (error) {
+    // At-most-once volontaire : le claim n'est jamais supprimé. Une erreur ou
+    // un timeout SMTP est ambigu (le serveur peut avoir accepté le message),
+    // donc un replay automatique risquerait de créer un doublon vendeur.
+    console.error(JSON.stringify({
+      component: 'stripe_webhook',
+      event: 'side_effect_failed_after_claim',
+      key,
+      retrySuppressed: true,
+      error: error.message,
+    }));
+    return { delivered: false, claimed: true, retrySuppressed: true };
+  }
+}
+
+function invoicePriceIds(invoice) {
+  return (invoice.lines?.data || [])
+    .map((line) => line.price?.id || line.pricing?.price_details?.price)
+    .filter(Boolean);
+}
+
+function invoiceSubscriptionId(invoice) {
+  const legacy = invoice.subscription;
+  if (typeof legacy === 'string') return legacy;
+  if (legacy && typeof legacy === 'object' && legacy.id) return legacy.id;
+
+  const current = invoice.parent?.subscription_details?.subscription;
+  if (typeof current === 'string') return current;
+  if (current && typeof current === 'object' && current.id) return current.id;
+  return null;
+}
+
+function isAchzodLabInvoice(invoice, options = {}) {
+  const allowedPriceIds = options.allowedPriceIds || getAchzodLabPriceIds(options.env);
+  const priceIds = invoicePriceIds(invoice);
+  // Aucune metadata ne peut élargir ce filtre : seuls les Price IDs AchzodLab
+  // explicitement configurés autorisent la notification d'une invoice.
+  return priceIds.length > 0 && priceIds.every((priceId) => allowedPriceIds.has(priceId));
+}
+
+async function fulfillPaidCheckout(stripe, sessionId, paymentMethod, options = {}) {
+  let session = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ['invoice', 'payment_intent', 'subscription'],
+  });
+  session = await expandFulfillmentStore(stripe, session);
+  if (session.payment_status !== 'paid') return { pending: true };
+  if (session.mode === 'subscription') {
+    // Une subscription est notifiée exclusivement depuis invoice.paid. Cela
+    // partage la même identité entre les deux routes et évite checkout+invoice.
+    return { awaitingInvoiceNotification: true };
+  }
+
+  const store = options.store || getDefaultFulfillmentStore();
+  const identity = getFulfillmentIdentity(session);
+  const sendAdmin = options.sendOrderNotification || sendOrderNotification;
+  const sendCustomer = options.sendCustomerOrderEmail || sendCustomerOrderEmail;
+  const now = options.now || (() => new Date());
+  const customerEmail = session.customer_details?.email || session.customer_email;
+  const customerName = session.customer_details?.name || '';
+  const totalAmount = session.amount_total ? (session.amount_total / 100).toFixed(2) : '0.00';
+  if (!customerEmail) throw new Error('Email client absent sur une commande payée');
+
+  const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 100 });
+  const ebooks = [];
+  const productNames = [];
+  for (const item of lineItems.data) {
+    const rawName = item.description || item.price?.nickname || 'Produit';
+    const displayName = item.quantity > 1 ? `${rawName} x${item.quantity}` : rawName;
+    productNames.push(displayName);
+    const ebookData = findEbookLink(rawName);
+    if (ebookData) ebooks.push(ebookData);
+  }
+
+  const adminResult = await deliverClaimedSideEffect({
+    store,
+    identity,
+    effect: 'admin_notification',
+    send: () => sendAdmin(
+      customerEmail,
+      customerName,
+      productNames,
+      totalAmount,
+      paymentMethod,
+      identity,
+    ),
+    failureMessage: 'Notification vendeur non envoyée',
+    now,
+  });
+  const customerResult = await deliverClaimedSideEffect({
+    store,
+    identity,
+    effect: 'customer_email',
+    send: () => sendCustomer(customerEmail, customerName, productNames, ebooks, totalAmount),
+    failureMessage: 'Confirmation client non envoyée',
+    now,
+  });
+  return {
+    delivered: Boolean(adminResult.delivered && customerResult.delivered),
+    adminNotification: adminResult,
+    customerEmail: customerResult,
+  };
+}
+
+async function fulfillPaidInvoice(stripe, invoiceId, paymentMethod, options = {}) {
+  const invoice = await stripe.invoices.retrieve(invoiceId, {
+    expand: ['lines.data.price.product'],
+  });
+  if (invoice.status !== 'paid' && !invoice.paid) return { pending: true };
+  if (!invoiceSubscriptionId(invoice)) {
+    return { ignored: true, reason: 'invoice_not_subscription' };
+  }
+  if (!isAchzodLabInvoice(invoice, options)) return { ignored: true, reason: 'invoice_not_achzodlab' };
+
+  const store = options.store || getDefaultFulfillmentStore();
+  const identity = `invoice:${invoice.id}`;
+  const customerEmail = invoice.customer_email || invoice.customer?.email;
+  const customerName = invoice.customer_name || invoice.customer?.name || '';
+  const totalAmount = ((invoice.amount_paid ?? invoice.total ?? 0) / 100).toFixed(2);
+  if (!customerEmail) throw new Error('Email client absent sur une facture payée');
+
+  const productNames = (invoice.lines?.data || []).map((item) => {
+    const rawName = item.description || item.price?.nickname || item.price?.product?.name || 'Produit';
+    return item.quantity > 1 ? `${rawName} x${item.quantity}` : rawName;
+  });
+  const sendAdmin = options.sendOrderNotification || sendOrderNotification;
+  const now = options.now || (() => new Date());
+
+  const adminResult = await deliverClaimedSideEffect({
+    store,
+    identity,
+    effect: 'admin_notification',
+    send: () => sendAdmin(
+      customerEmail,
+      customerName,
+      productNames,
+      totalAmount,
+      paymentMethod,
+      identity,
+    ),
+    failureMessage: 'Notification vendeur non envoyée',
+    now,
+  });
+
+  return {
+    delivered: Boolean(adminResult.delivered),
+    adminNotification: adminResult,
+  };
 }
 
 function paymentMethodLabelForReplay(account) {
@@ -903,8 +1089,8 @@ async function resolveCheckoutSessionForReplay(sessionId, preferredAccount = 'au
   throw lastError || new Error('Session Stripe introuvable');
 }
 
-function registerStripeWebhook(path, stripe, secretName, paymentMethod) {
-  app.post(path, async (req, res) => {
+function createStripeWebhookHandler(stripe, secretName, paymentMethod, options = {}) {
+  return async (req, res) => {
     const secret = process.env[secretName];
     const signature = req.headers['stripe-signature'];
     let event;
@@ -912,21 +1098,48 @@ function registerStripeWebhook(path, stripe, secretName, paymentMethod) {
       if (!stripe || !secret || !signature) throw new Error('Configuration ou signature webhook absente');
       event = stripe.webhooks.constructEvent(req.body, signature, secret);
     } catch (error) {
-      console.error(`Webhook invalide ${path}:`, error.message);
+      console.error(`Webhook invalide ${options.path || 'Stripe'}:`, error.message);
       return res.status(400).send('Webhook Error');
     }
 
-    if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) {
-      return res.json({ received: true, ignored: true });
-    }
     try {
-      const result = await fulfillPaidCheckout(stripe, event.data.object.id, paymentMethod);
+      let result;
+      if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) {
+        result = await fulfillPaidCheckout(stripe, event.data.object.id, paymentMethod, options.fulfillment);
+      } else if (event.type === 'invoice.paid') {
+        result = await fulfillPaidInvoice(
+          stripe,
+          event.data.object.id,
+          `${paymentMethod} abonnement`,
+          options.fulfillment,
+        );
+      } else {
+        return res.json({ received: true, ignored: true });
+      }
       return res.json({ received: true, ...result });
     } catch (error) {
-      console.error(`Échec livraison ${path}:`, error);
-      return res.status(500).json({ received: true, delivered: false });
+      console.error(JSON.stringify({
+        component: 'stripe_webhook',
+        event: 'delivery_error_acknowledged',
+        path: options.path || 'Stripe',
+        stripeEventId: event.id || null,
+        stripeEventType: event.type,
+        retrySuppressed: true,
+        error: error.message,
+      }));
+      // Une fois la signature vérifiée, on accuse toujours réception. Les
+      // replays automatiques ne doivent jamais pouvoir renvoyer un email.
+      return res.status(200).json({
+        received: true,
+        delivered: false,
+        retrySuppressed: true,
+      });
     }
-  });
+  };
+}
+
+function registerStripeWebhook(path, stripe, secretName, paymentMethod) {
+  app.post(path, createStripeWebhookHandler(stripe, secretName, paymentMethod, { path }));
 }
 
 registerStripeWebhook('/webhook', stripeUAE, 'STRIPE_WEBHOOK_SECRET', 'Stripe');
@@ -1165,7 +1378,11 @@ app.get('/setup-webhook-fr', requireDiagnosticAuth, async (req, res) => {
     // Créer le webhook
     const webhook = await stripeFR.webhookEndpoints.create({
       url: webhookUrl,
-      enabled_events: ['checkout.session.completed', 'checkout.session.async_payment_succeeded'],
+      enabled_events: [
+        'checkout.session.completed',
+        'checkout.session.async_payment_succeeded',
+        'invoice.paid',
+      ],
       description: 'Webhook Klarna ACHZOD - Notifications commandes'
     });
     
@@ -1230,7 +1447,7 @@ app.get('/diagnostic', requireDiagnosticAuth, (req, res) => {
 app.get('/test-email', requireDiagnosticAuth, async (req, res) => {
   try {
     const to = req.query.to || process.env.EMAIL_USER || 'achzodyt@gmail.com';
-    const info = await transporter.sendMail({
+    const info = await sendMailWithTimeout({
       from: `"ACHZOD DIAG" <${process.env.EMAIL_USER || 'achzodyt@gmail.com'}>`,
       to,
       subject: '✅ Test email ACHZOD - ' + new Date().toISOString(),
@@ -1355,7 +1572,14 @@ if (require.main === module) {
 
 module.exports = {
   app,
+  createStripeWebhookHandler,
   findEbookLink,
+  fulfillPaidCheckout,
+  fulfillPaidInvoice,
+  getFulfillmentIdentity,
+  getFulfillmentMetadata,
+  invoiceSubscriptionId,
+  isAchzodLabInvoice,
   isCoachingProduct,
   normalizeProductLabel,
 };

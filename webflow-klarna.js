@@ -1,13 +1,16 @@
 (function () {
   'use strict';
 
-  if (!/\/checkout\/?$/.test(window.location.pathname)) return;
-
   var API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout-klarna';
   var PAYPAL_API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout-paypal';
   var PAYPAL_CONFIG_URL = 'https://achzod-klarna-checkout.onrender.com/paypal/config';
   var BUTTON_ID = 'achzod-klarna-checkout';
   var LEGACY_IDS = ['klarna-fixed-btn', 'ac-klarna-fixed', 'ac-klarna-btn'];
+  var LEGACY_PAYPAL_SELECTORS = [
+    '[data-wf-paypal-button]',
+    '[data-wf-paypal-element]',
+    '.paypal-2'
+  ];
   var LEGACY_BACKUP_KEYS = ['achzod_cart_backup', 'achzod_cart_timestamp'];
   var LEGACY_BACKUP_COOKIE = 'achzod_cart';
   var PROMO_STORAGE_KEY = 'achzod_klarna_promo';
@@ -200,6 +203,11 @@
       var node = document.getElementById(id);
       if (node) node.remove();
     });
+    LEGACY_PAYPAL_SELECTORS.forEach(function (selector) {
+      Array.prototype.forEach.call(document.querySelectorAll(selector), function (node) {
+        if (node && node.id !== BUTTON_ID && !node.closest('#' + BUTTON_ID)) node.remove();
+      });
+    });
   }
 
   async function openKlarnaCheckout(button, errorBox) {
@@ -330,6 +338,17 @@
     }
   }
 
+  // Neutralise aussi le PayPal natif Webflow sur les pages panier globales.
+  removeLegacyButtons();
+  var cleanupCount = 0;
+  var cleanupTimer = window.setInterval(function () {
+    removeLegacyButtons();
+    cleanupCount += 1;
+    if (cleanupCount >= 10) window.clearInterval(cleanupTimer);
+  }, 1000);
+
+  if (!/\/checkout\/?$/.test(window.location.pathname)) return;
+
   // Recharge complète du checkout Webflow quand la page revient du cache
   // (bouton retour navigateur, retour depuis Stripe/Klarna). Force la lecture
   // du panier réel côté serveur Webflow au lieu du snapshot mis en cache.
@@ -378,10 +397,4 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();
-  var cleanupCount = 0;
-  var cleanupTimer = window.setInterval(function () {
-    removeLegacyButtons();
-    cleanupCount += 1;
-    if (cleanupCount >= 10) window.clearInterval(cleanupTimer);
-  }, 1000);
 })();

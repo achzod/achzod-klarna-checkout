@@ -6,6 +6,12 @@ const { randomUUID } = require('node:crypto');
 const { MemoryFulfillmentStore, RedisFulfillmentStore } = require('./fulfillment-store');
 const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems, resolveProduct } = require('./checkout-security');
 const {
+  capturePayPalOrder,
+  createPayPalOrder,
+  isPayPalCheckoutEnabled,
+  summarizePayPalOrder,
+} = require('./paypal-client');
+const {
   CheckoutRequestError,
   buildCheckoutMetadata,
   buildCheckoutUrls,
@@ -386,6 +392,74 @@ async function createKlarnaSession(req, res) {
 }
 app.post(['/checkout-klarna', '/create-klarna-session'], checkoutRateLimit, createKlarnaSession);
 
+function getPublicBaseUrl(req) {
+  const configured = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'https';
+  return `${protocol}://${req.get('host')}`;
+}
+
+function buildSuccessRedirect(orderId) {
+  const url = new URL('https://achzodcoaching.com/order-confirmation');
+  url.searchParams.set('paypal', 'true');
+  if (orderId) url.searchParams.set('token', orderId);
+  return url.toString();
+}
+
+function buildCancelRedirect(errorCode) {
+  const url = new URL('https://achzodcoaching.com/checkout');
+  if (errorCode) url.searchParams.set('paypal_error', errorCode);
+  return url.toString();
+}
+
+app.get('/paypal/config', (req, res) => {
+  res.json({ enabled: isPayPalCheckoutEnabled() });
+});
+
+app.post(['/checkout-paypal', '/create-paypal-order'], checkoutRateLimit, async (req, res) => {
+  if (!isPayPalCheckoutEnabled()) {
+    return res.status(503).json({ error: 'PayPal indisponible pour le moment.' });
+  }
+
+  try {
+    const { successUrl, cancelUrl, customerEmail } = req.body;
+    const cart = buildLineItems(req.body, false);
+    const email = validateCustomerEmail(customerEmail);
+    const urls = buildCheckoutUrls(successUrl, cancelUrl);
+    const returnUrl = new URL('/paypal/return', getPublicBaseUrl(req));
+    const orderReference = buildIdempotencyKey(req, cart, email).replace(/^achzod_checkout_/, 'achzod_');
+    const { order, approvalUrl } = await createPayPalOrder(cart, {
+      returnUrl: returnUrl.toString(),
+      cancelUrl: urls.cancelUrl,
+      orderReference,
+      headers: { 'PayPal-Request-Id': orderReference },
+    });
+    return res.json({ url: approvalUrl, orderId: order.id });
+  } catch (error) {
+    console.error('Erreur PayPal create-order:', error);
+    const clientError = error instanceof CheckoutValidationError || error instanceof CheckoutRequestError;
+    return res.status(clientError ? 400 : 500).json({
+      error: clientError ? error.message : 'Impossible de lancer PayPal. Réessaie dans un instant.',
+    });
+  }
+});
+
+app.get('/paypal/return', async (req, res) => {
+  if (!isPayPalCheckoutEnabled()) {
+    return res.redirect(buildCancelRedirect('disabled'));
+  }
+
+  const orderId = String(req.query.token || '').trim();
+  try {
+    const order = await capturePayPalOrder(orderId);
+    await fulfillCapturedPayPalOrder(order);
+    return res.redirect(buildSuccessRedirect(order.id || orderId));
+  } catch (error) {
+    console.error('Erreur PayPal capture:', error);
+    return res.redirect(buildCancelRedirect('capture'));
+  }
+});
+
 function normalizeProductLabel(value) {
   return String(value || '')
     .toLowerCase()
@@ -748,6 +822,12 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
   const safeProducts = products.map(escapeHtml);
   const safeTotalAmount = escapeHtml(totalAmount);
   const safePaymentMethod = escapeHtml(paymentMethod || 'Klarna/Stripe');
+  const paymentDashboardUrl = /paypal/i.test(String(paymentMethod || ''))
+    ? 'https://www.paypal.com/activity'
+    : 'https://dashboard.stripe.com/payments';
+  const paymentDashboardLabel = /paypal/i.test(String(paymentMethod || ''))
+    ? 'Voir dans PayPal'
+    : 'Voir dans Stripe';
   
   const htmlNotification = `
 <!DOCTYPE html>
@@ -755,7 +835,7 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
 <head><meta charset="UTF-8"></head>
 <body style="font-family: Arial, sans-serif; background: #0A0B09; padding: 20px;">
   <div style="max-width: 500px; margin: 0 auto; background: #1a1a1a; border-radius: 12px; padding: 30px; border: 1px solid #2a2a2a;">
-    <h1 style="color: #FFB3C7; margin: 0 0 20px 0; font-size: 24px;">💰 Nouvelle vente Klarna !</h1>
+    <h1 style="color: #FFB3C7; margin: 0 0 20px 0; font-size: 24px;">💰 Nouvelle vente ${safePaymentMethod} !</h1>
     
     <table style="width: 100%; color: #fff; font-size: 14px;">
       <tr>
@@ -785,7 +865,7 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
     </table>
     
     <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #2a2a2a; text-align: center;">
-      <a href="https://dashboard.stripe.com/payments" style="color: #FFB3C7; text-decoration: none;">Voir dans Stripe →</a>
+      <a href="${paymentDashboardUrl}" style="color: #FFB3C7; text-decoration: none;">${paymentDashboardLabel} →</a>
     </div>
   </div>
 </body>
@@ -800,7 +880,7 @@ async function sendOrderNotification(customerEmail, customerName, products, tota
       address: process.env.EMAIL_USER || 'achzodyt@gmail.com'
     },
     to: adminEmail,
-    subject: `💰 Vente Klarna: ${totalAmount}€ - ${products[0] || 'Produit'}`,
+    subject: `💰 Vente ${paymentMethod || 'checkout'}: ${totalAmount}€ - ${products[0] || 'Produit'}`,
     html: htmlNotification,
     // Défense supplémentaire côté SMTP/Gmail. La vérité d'idempotence reste le
     // claim Stripe, mais un replay exceptionnel garde aussi le même Message-ID.
@@ -1061,6 +1141,58 @@ async function fulfillPaidInvoice(stripe, invoiceId, paymentMethod, options = {}
   return {
     delivered: Boolean(adminResult.delivered),
     adminNotification: adminResult,
+  };
+}
+
+async function fulfillCapturedPayPalOrder(order, options = {}) {
+  if (order.status !== 'COMPLETED') return { pending: true, status: order.status };
+
+  const summary = summarizePayPalOrder(order);
+  if (!summary.customerEmail) throw new Error('Email client absent sur une commande PayPal payée');
+  if (!summary.productNames.length) throw new Error('Produits absents sur une commande PayPal payée');
+
+  const store = options.store || getDefaultFulfillmentStore();
+  const sendAdmin = options.sendOrderNotification || sendOrderNotification;
+  const sendCustomer = options.sendCustomerOrderEmail || sendCustomerOrderEmail;
+  const now = options.now || (() => new Date());
+  const ebooks = summary.productNames
+    .map((name) => findEbookLink(name))
+    .filter(Boolean);
+
+  const adminResult = await deliverClaimedSideEffect({
+    store,
+    identity: summary.identity,
+    effect: 'admin_notification',
+    send: () => sendAdmin(
+      summary.customerEmail,
+      summary.customerName,
+      summary.productNames,
+      summary.totalAmount,
+      'PayPal',
+      summary.identity,
+    ),
+    failureMessage: 'Notification vendeur PayPal non envoyée',
+    now,
+  });
+  const customerResult = await deliverClaimedSideEffect({
+    store,
+    identity: summary.identity,
+    effect: 'customer_email',
+    send: () => sendCustomer(
+      summary.customerEmail,
+      summary.customerName,
+      summary.productNames,
+      ebooks,
+      summary.totalAmount,
+    ),
+    failureMessage: 'Confirmation client PayPal non envoyée',
+    now,
+  });
+
+  return {
+    delivered: Boolean(adminResult.delivered && customerResult.delivered),
+    adminNotification: adminResult,
+    customerEmail: customerResult,
   };
 }
 
@@ -1574,6 +1706,7 @@ module.exports = {
   app,
   createStripeWebhookHandler,
   findEbookLink,
+  fulfillCapturedPayPalOrder,
   fulfillPaidCheckout,
   fulfillPaidInvoice,
   getFulfillmentIdentity,

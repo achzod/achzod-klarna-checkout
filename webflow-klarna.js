@@ -4,6 +4,8 @@
   if (!/\/checkout\/?$/.test(window.location.pathname)) return;
 
   var API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout-klarna';
+  var PAYPAL_API_URL = 'https://achzod-klarna-checkout.onrender.com/checkout-paypal';
+  var PAYPAL_CONFIG_URL = 'https://achzod-klarna-checkout.onrender.com/paypal/config';
   var BUTTON_ID = 'achzod-klarna-checkout';
   var LEGACY_IDS = ['klarna-fixed-btn', 'ac-klarna-fixed', 'ac-klarna-btn'];
   var LEGACY_BACKUP_KEYS = ['achzod_cart_backup', 'achzod_cart_timestamp'];
@@ -255,6 +257,79 @@
     }
   }
 
+  async function isPayPalAvailable() {
+    try {
+      var controller = window.AbortController ? new AbortController() : null;
+      var timeout = window.setTimeout(function () {
+        if (controller) controller.abort();
+      }, 1200);
+      var response = await fetch(PAYPAL_CONFIG_URL, {
+        method: 'GET',
+        signal: controller ? controller.signal : undefined,
+      });
+      window.clearTimeout(timeout);
+      var data = await response.json().catch(function () { return {}; });
+      return Boolean(response.ok && data.enabled);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function openPayPalCheckout(button, errorBox) {
+    if (button && button.disabled) return;
+
+    var payload;
+    try {
+      payload = await buildPayload();
+    } catch (_) {
+      payload = { items: [] };
+    }
+
+    if (!payload.items.length) {
+      if (errorBox) {
+        errorBox.textContent = 'Ton panier semble vide. Recharge la page puis réessaie.';
+        errorBox.style.display = 'block';
+      }
+      return;
+    }
+
+    var original = button ? button.innerHTML : '';
+    if (button) {
+      button.disabled = true;
+      button.style.opacity = '.72';
+      button.textContent = 'Ouverture de PayPal...';
+    }
+    if (errorBox) errorBox.style.display = 'none';
+
+    var attemptId = newAttemptId();
+    track('paypal_checkout_started', {
+      cart_quantity: payload.items.reduce(function (sum, item) { return sum + item.quantity; }, 0),
+    });
+
+    try {
+      var response = await fetch(PAYPAL_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Checkout-Attempt': attemptId },
+        body: JSON.stringify(payload),
+      });
+      var data = await response.json().catch(function () { return {}; });
+      if (!response.ok || !data.url) throw new Error(data.error || 'Le paiement PayPal ne répond pas');
+      track('paypal_checkout_ready');
+      window.location.assign(data.url);
+    } catch (error) {
+      track('paypal_checkout_error', { message: String(error.message || 'unknown').slice(0, 120) });
+      if (errorBox) {
+        errorBox.textContent = String(error.message || 'PayPal est momentanément indisponible. Utilise Klarna ou carte bancaire.');
+        errorBox.style.display = 'block';
+      }
+      if (button) {
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.innerHTML = original;
+      }
+    }
+  }
+
   // Recharge complète du checkout Webflow quand la page revient du cache
   // (bouton retour navigateur, retour depuis Stripe/Klarna). Force la lecture
   // du panier réel côté serveur Webflow au lieu du snapshot mis en cache.
@@ -269,27 +344,35 @@
     });
   }
 
-  function mount() {
+  async function mount() {
     purgeLegacyBackups();
     removeLegacyButtons();
     setupBFCacheReload();
     if (document.getElementById(BUTTON_ID)) return;
     trackPromotionForm();
+    var paypalAvailable = await isPayPalAvailable();
 
     var wrap = document.createElement('div');
     wrap.id = BUTTON_ID;
     wrap.setAttribute('style', 'position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:12px 15px;background:#FFB3C7;box-shadow:0 -4px 18px rgba(0,0,0,.25)');
-    wrap.innerHTML = '<button type="button" style="width:100%;max-width:520px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 20px;background:#0A0B09;color:#fff;font-weight:800;font-size:16px;border:0;border-radius:10px;cursor:pointer"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px">Payer en 3x avec Klarna</button><div role="alert" aria-live="polite" style="display:none;max-width:520px;margin:8px auto 0;color:#0A0B09;font-size:13px;font-weight:700;text-align:center"></div>';
+    wrap.innerHTML = '<div style="width:100%;max-width:520px;margin:0 auto;display:grid;grid-template-columns:' + (paypalAvailable ? '1fr 1fr' : '1fr') + ';gap:10px"><button type="button" class="ac-klarna-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#0A0B09;color:#fff;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px">Klarna 3x</button>' + (paypalAvailable ? '<button type="button" class="ac-paypal-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#fff;color:#003087;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" style="height:20px">PayPal</button>' : '') + '</div><div role="alert" aria-live="polite" style="display:none;max-width:520px;margin:8px auto 0;color:#0A0B09;font-size:13px;font-weight:700;text-align:center"></div>';
     document.body.appendChild(wrap);
     document.body.style.paddingBottom = '90px';
 
-    var button = wrap.querySelector('button');
+    var klarnaButton = wrap.querySelector('.ac-klarna-btn');
+    var paypalButton = wrap.querySelector('.ac-paypal-btn');
     var errorBox = wrap.querySelector('[role="alert"]');
     window.klarnaGo = function () {
-      return openKlarnaCheckout(button, errorBox);
+      return openKlarnaCheckout(klarnaButton, errorBox);
     };
-    button.addEventListener('click', function () {
-      return openKlarnaCheckout(button, errorBox);
+    window.paypalGo = function () {
+      return openPayPalCheckout(paypalButton, errorBox);
+    };
+    klarnaButton.addEventListener('click', function () {
+      return openKlarnaCheckout(klarnaButton, errorBox);
+    });
+    if (paypalButton) paypalButton.addEventListener('click', function () {
+      return openPayPalCheckout(paypalButton, errorBox);
     });
   }
 

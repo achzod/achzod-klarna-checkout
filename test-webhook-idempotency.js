@@ -15,6 +15,7 @@ process.env.EMAIL_PASS ||= 'dummy';
 
 const {
   createStripeWebhookHandler,
+  fulfillCapturedPayPalOrder,
   fulfillPaidCheckout,
   fulfillPaidInvoice,
   isAchzodLabInvoice,
@@ -176,6 +177,37 @@ async function testSubscriptionAndStrictFilter() {
   assert.equal(sends, 2, 'formes subscription legacy et API récente acceptées');
 }
 
+async function testPayPalFulfillmentUsesStoredCartWhenCaptureOmitsItems() {
+  const store = new MemoryFulfillmentStore();
+  const sent = { admin: [], customer: [] };
+  const result = await fulfillCapturedPayPalOrder({
+    id: 'PAYPAL_NO_ITEMS',
+    status: 'COMPLETED',
+    payer: {
+      email_address: 'paypal-client@example.com',
+      name: { given_name: 'PayPal', surname: 'Client' },
+    },
+    purchase_units: [{
+      amount: { value: '549.00' },
+    }],
+  }, {
+    store,
+    fallbackOrder: {
+      productNames: ['Essential 12 semaines'],
+      totalAmount: '549.00',
+    },
+    now: () => new Date('2026-08-09T08:00:00.000Z'),
+    sendOrderNotification: async (...args) => { sent.admin.push(args); return true; },
+    sendCustomerOrderEmail: async (...args) => { sent.customer.push(args); return true; },
+  });
+
+  assert.equal(result.delivered, true);
+  assert.equal(sent.admin.length, 1);
+  assert.equal(sent.customer.length, 1);
+  assert.deepEqual(sent.admin[0][2], ['Essential 12 semaines']);
+  assert.deepEqual(sent.customer[0][2], ['Essential 12 semaines']);
+}
+
 async function requestJson(port) {
   return new Promise((resolve, reject) => {
     const req = http.request({
@@ -295,6 +327,7 @@ Promise.resolve()
   .then(testReplayRestartAndConcurrency)
   .then(testCrashBeforeAndAfterSmtp)
   .then(testSubscriptionAndStrictFilter)
+  .then(testPayPalFulfillmentUsesStoredCartWhenCaptureOmitsItems)
   .then(testRealHttpAlwaysAcknowledgesDeliveryFailure)
   .then(testRedisStoreUsesAtomicSetNxWithTtl)
   .then(testRealRedisMultiProcessWhenAvailable)

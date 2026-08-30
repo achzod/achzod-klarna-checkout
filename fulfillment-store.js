@@ -56,6 +56,29 @@ class RedisFulfillmentStore {
     return result === 'OK' ? { status: 'acquired', owner } : { status: 'duplicate' };
   }
 
+  async setJson({ key, value, ttlMs = this.claimTtlMs }) {
+    await this.connect();
+    await this.client.set(this.redisKey(key), JSON.stringify(value), { PX: ttlMs });
+    return true;
+  }
+
+  async getJson({ key }) {
+    await this.connect();
+    const raw = await this.client.get(this.redisKey(key));
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      console.error(JSON.stringify({
+        component: 'fulfillment_store',
+        event: 'redis_json_parse_failed',
+        key,
+        error: error.message,
+      }));
+      return null;
+    }
+  }
+
   async close() {
     if (this.client.isOpen) await this.client.close();
   }
@@ -74,6 +97,16 @@ class MemoryFulfillmentStore {
       claimedAt: new Date(nowMs).toISOString(),
     });
     return { status: 'acquired', owner };
+  }
+
+  async setJson({ key, value }) {
+    this.state.set(key, { value: JSON.parse(JSON.stringify(value)) });
+    return true;
+  }
+
+  async getJson({ key }) {
+    const entry = this.state.get(key);
+    return entry?.value ? JSON.parse(JSON.stringify(entry.value)) : null;
   }
 
   snapshot(key) {

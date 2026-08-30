@@ -145,24 +145,33 @@ async function capturePayPalOrder(orderId, options = {}) {
   });
 }
 
-function summarizePayPalOrder(order) {
+function normalizeFallbackProductNames(fallback) {
+  return Array.isArray(fallback?.productNames)
+    ? fallback.productNames.map((name) => String(name || '').trim()).filter(Boolean)
+    : [];
+}
+
+function summarizePayPalOrder(order, fallback = {}) {
   const purchaseUnit = order.purchase_units?.[0] || {};
   const shippingName = purchaseUnit.shipping?.name?.full_name || '';
   const payer = order.payer || {};
-  const customerEmail = payer.email_address || '';
+  const customerEmail = payer.email_address || fallback.customerEmail || '';
   const customerName = payer.name
     ? [payer.name.given_name, payer.name.surname].filter(Boolean).join(' ')
-    : shippingName;
+    : shippingName || fallback.customerName || '';
   const items = (purchaseUnit.items || []).map((item) => ({
     name: item.name || 'Produit',
     quantity: Number(item.quantity || 1),
   }));
-  const totalAmount = purchaseUnit.amount?.value || '0.00';
+  const productNames = items.length
+    ? items.map((item) => item.quantity > 1 ? `${item.name} x${item.quantity}` : item.name)
+    : normalizeFallbackProductNames(fallback);
+  const totalAmount = purchaseUnit.amount?.value || fallback.totalAmount || '0.00';
   return {
     identity: `paypal:${order.id}`,
     customerEmail,
     customerName,
-    productNames: items.map((item) => item.quantity > 1 ? `${item.name} x${item.quantity}` : item.name),
+    productNames,
     totalAmount,
     status: order.status,
   };

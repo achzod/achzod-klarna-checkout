@@ -68,4 +68,24 @@ assert.equal(summary.customerName, 'Ach Client');
 assert.deepEqual(summary.productNames, ['Essential 8 semaines', 'Anabolic Code x2']);
 assert.equal(summary.totalAmount, '497.00');
 
+const fallbackSummary = summarizePayPalOrder({
+  id: 'PAYPAL456',
+  status: 'COMPLETED',
+  payer: {
+    email_address: 'fallback-client@example.com',
+    name: { given_name: 'Fallback', surname: 'Client' },
+  },
+  purchase_units: [{
+    amount: { value: '399.00' },
+  }],
+}, {
+  customerEmail: 'stored-client@example.com',
+  productNames: ['Essential 8 semaines'],
+  totalAmount: '399.00',
+});
+
+assert.equal(fallbackSummary.customerEmail, 'fallback-client@example.com');
+assert.deepEqual(fallbackSummary.productNames, ['Essential 8 semaines']);
+assert.equal(fallbackSummary.totalAmount, '399.00');
+
 console.log('✓ client PayPal validé');

@@ -412,6 +412,44 @@ function buildCancelRedirect(errorCode) {
   return url.toString();
 }
 
+const PAYPAL_PENDING_ORDER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function paypalPendingOrderKey(orderId) {
+  return `paypal_order:${String(orderId || '').trim()}`;
+}
+
+function buildPendingPayPalOrder(cart, customerEmail) {
+  return {
+    customerEmail,
+    productNames: cart.items
+      .map((item) => {
+        const name = String(item.name || '').trim();
+        const quantity = Number(item.quantity || 1);
+        if (!name) return null;
+        return quantity > 1 ? `${name} x${quantity}` : name;
+      })
+      .filter(Boolean),
+    totalAmount: cart.totalCents ? (cart.totalCents / 100).toFixed(2) : '0.00',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function rememberPendingPayPalOrder(orderId, pendingOrder, options = {}) {
+  const store = options.store || getDefaultFulfillmentStore();
+  if (typeof store.setJson !== 'function') throw new Error('Store fulfillment sans stockage JSON PayPal');
+  await store.setJson({
+    key: paypalPendingOrderKey(orderId),
+    value: pendingOrder,
+    ttlMs: PAYPAL_PENDING_ORDER_TTL_MS,
+  });
+}
+
+async function getPendingPayPalOrder(orderId, options = {}) {
+  const store = options.store || getDefaultFulfillmentStore();
+  if (typeof store.getJson !== 'function') return null;
+  return store.getJson({ key: paypalPendingOrderKey(orderId) });
+}
+
 app.get('/paypal/config', (req, res) => {
   res.json({ enabled: isPayPalCheckoutEnabled() });
 });
@@ -434,6 +472,7 @@ app.post(['/checkout-paypal', '/create-paypal-order'], checkoutRateLimit, async 
       orderReference,
       headers: { 'PayPal-Request-Id': orderReference },
     });
+    await rememberPendingPayPalOrder(order.id, buildPendingPayPalOrder(cart, email));
     return res.json({ url: approvalUrl, orderId: order.id });
   } catch (error) {
     console.error('Erreur PayPal create-order:', error);
@@ -452,7 +491,8 @@ app.get('/paypal/return', async (req, res) => {
   const orderId = String(req.query.token || '').trim();
   try {
     const order = await capturePayPalOrder(orderId);
-    await fulfillCapturedPayPalOrder(order);
+    const fallbackOrder = await getPendingPayPalOrder(order.id || orderId);
+    await fulfillCapturedPayPalOrder(order, { fallbackOrder });
     return res.redirect(buildSuccessRedirect(order.id || orderId));
   } catch (error) {
     console.error('Erreur PayPal capture:', error);
@@ -1147,7 +1187,7 @@ async function fulfillPaidInvoice(stripe, invoiceId, paymentMethod, options = {}
 async function fulfillCapturedPayPalOrder(order, options = {}) {
   if (order.status !== 'COMPLETED') return { pending: true, status: order.status };
 
-  const summary = summarizePayPalOrder(order);
+  const summary = summarizePayPalOrder(order, options.fallbackOrder || {});
   if (!summary.customerEmail) throw new Error('Email client absent sur une commande PayPal payée');
   if (!summary.productNames.length) throw new Error('Produits absents sur une commande PayPal payée');
 

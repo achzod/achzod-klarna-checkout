@@ -36,7 +36,7 @@ npm test
 
 ### Produits testés :
 1. **EBOOK** (4.90€) - doit trouver "liberer son potentiel"
-2. **ANABOLIC CODE** (7.90€) - doit trouver "anabolic code"
+2. **ANABOLIC CODE** (59€) - doit trouver "anabolic code"
 3. **4 Semaines pour être SHRED** (5.90€) - doit trouver "4 semaines pour etre shred"
 4. **Bioénergétique** (5.90€) - doit trouver "bioenergetique"
 5. **Libérer son potentiel génétique en 10 semaines** (4.90€) - doit trouver "liberer son potentiel"
@@ -72,6 +72,5 @@ Le script affiche :
 - Les tests créent des sessions Stripe réelles (mais non payées)
 - Les sessions expirent après 30 minutes
 - Les tests peuvent prendre quelques minutes (pause de 1s entre chaque test)
-
 
 

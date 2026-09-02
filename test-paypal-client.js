@@ -30,7 +30,7 @@ assert.throws(() => centsToPaypalValue(0), /Montant PayPal invalide/);
 const payload = buildPayPalOrderPayload({
   items: [
     { name: 'Essential 8 semaines', quantity: 1, amount: 39900 },
-    { name: 'Anabolic Code', quantity: 2, amount: 7900 },
+    { name: 'Anabolic Code', quantity: 2, amount: 5900 },
   ],
   totalCents: 49700,
 }, {
@@ -41,8 +41,8 @@ const payload = buildPayPalOrderPayload({
 
 assert.equal(payload.intent, 'CAPTURE');
 assert.equal(payload.purchase_units[0].amount.value, '497.00');
-assert.equal(payload.purchase_units[0].amount.breakdown.item_total.value, '557.00');
-assert.equal(payload.purchase_units[0].amount.breakdown.discount.value, '60.00');
+assert.equal(payload.purchase_units[0].amount.breakdown.item_total.value, '517.00');
+assert.equal(payload.purchase_units[0].amount.breakdown.discount.value, '20.00');
 assert.equal(payload.purchase_units[0].items[1].quantity, '2');
 assert.equal(payload.application_context.shipping_preference, 'NO_SHIPPING');
 

@@ -9,7 +9,7 @@ function rejects(body, pattern) {
   assert.throws(() => validateAndPriceCart(body), pattern);
 }
 
-test('recalcule 236 € pour les quatre ebooks, sans croire les prix client', () => {
+test('recalcule 216 € pour les quatre ebooks, sans croire les prix client', () => {
   const body = { items: [
     { name: 'ANABOLIC CODE', price: 0.5 },
     { name: 'Bioénergétique', price: 0.5 },
@@ -17,8 +17,8 @@ test('recalcule 236 € pour les quatre ebooks, sans croire les prix client', ()
     { name: '4 Semaines pour être SHRED', price: 0.5 },
   ] };
   const cart = validateAndPriceCart(body);
-  assert.equal(cart.totalCents, 23600);
-  assert.deepEqual(cart.items.map(item => item.amount), [7900, 5900, 4900, 4900]);
+  assert.equal(cart.totalCents, 21600);
+  assert.deepEqual(cart.items.map(item => item.amount), [5900, 5900, 4900, 4900]);
 });
 
 test('bloque le total Lucas manipulé à 2 €', () => {
@@ -35,7 +35,7 @@ test('bloque le total Lucas manipulé à 2 €', () => {
 
 test('ignore un prix unitaire client falsifié quand aucun total n’est envoyé', () => {
   const result = buildLineItems({ items: [{ name: 'Anabolic Code', price: 0.01 }] }, false);
-  assert.equal(result.lineItems[0].price_data.unit_amount, 7900);
+  assert.equal(result.lineItems[0].price_data.unit_amount, 5900);
 });
 
 test('utilise le Price ID catalogue pour Stripe UAE', () => {
@@ -45,14 +45,14 @@ test('utilise le Price ID catalogue pour Stripe UAE', () => {
 
 test('accepte un total informatif exact', () => {
   assert.equal(validateAndPriceCart({
-    totalAmount: 236,
+    totalAmount: 216,
     items: [
       { name: 'Anabolic Code' },
       { name: 'Bioénergétique' },
       { name: 'Libérer son potentiel génétique' },
       { name: '4 semaines shred' },
     ],
-  }).totalCents, 23600);
+  }).totalCents, 21600);
 });
 
 test('bloque produit inconnu, quantité fractionnaire, nulle et excessive', () => {
@@ -128,15 +128,15 @@ test('récupère quantité 2 et BLOOD99 depuis l’ancien bouton Webflow', () =>
 
 test('accepte une remise ApexLabs sur panier mixte avec quantités exactes', () => {
   const cart = validateAndPriceCart({
-    totalAmount: 1078,
+    totalAmount: 1058,
     items: [
       { name: 'Essential 12 semaines', quantity: 2 },
       { name: 'Anabolic Code', quantity: 1 },
     ],
   });
-  assert.equal(cart.subtotalCents, 117700);
+  assert.equal(cart.subtotalCents, 115700);
   assert.equal(cart.promotionCode, 'BLOOD99');
-  assert.equal(cart.totalCents, 107800);
+  assert.equal(cart.totalCents, 105800);
 });
 
 test('répare le panier exact Elite 4 + Essential 8 malgré le mauvais total Webflow', () => {
@@ -242,9 +242,9 @@ test('applique FAQ50 uniquement aux ebooks', () => {
     discountCode: 'FAQ50',
     items: [{ name: 'Anabolic Code' }, { name: 'Bioénergétique' }],
   });
-  assert.equal(cart.subtotalCents, 13800);
-  assert.equal(cart.discountCents, 6900);
-  assert.equal(cart.totalCents, 6900);
+  assert.equal(cart.subtotalCents, 11800);
+  assert.equal(cart.discountCents, 5900);
+  assert.equal(cart.totalCents, 5900);
   rejects({ discountCode: 'FAQ50', items: [{ name: 'Essential 4 semaines' }] }, /ne s’applique pas/);
 });
 
@@ -305,7 +305,7 @@ test('recalcule intégralement les paniers mixtes coaching et ebooks', () => {
       { name: 'Bioénergétique', price: 0.01 },
     ],
   });
-  assert.equal(cart.totalCents, 38700);
+  assert.equal(cart.totalCents, 36700);
   rejects({
     totalAmount: 3,
     items: [

@@ -145,6 +145,7 @@ app.put('/admin/ebooks/:slug', requireEbookUploadToken, async (req, res) => {
   const tempPath = `${targetPath}.${randomUUID()}.upload`;
   const hash = createHash('sha256');
   let bytes = 0;
+  let magic = Buffer.alloc(0);
   let stream;
 
   try {
@@ -157,12 +158,20 @@ app.put('/admin/ebooks/:slug', requireEbookUploadToken, async (req, res) => {
         error.statusCode = 413;
         throw error;
       }
+      if (magic.length < 5) {
+        magic = Buffer.concat([magic, chunk]).subarray(0, 5);
+      }
       hash.update(chunk);
       if (!stream.write(chunk)) await once(stream, 'drain');
     }
     if (!bytes) {
       const error = new Error('Fichier vide');
       error.statusCode = 400;
+      throw error;
+    }
+    if (magic.toString('ascii') !== '%PDF-') {
+      const error = new Error('PDF invalide');
+      error.statusCode = 415;
       throw error;
     }
     await new Promise((resolve, reject) => {
@@ -187,6 +196,14 @@ app.put('/admin/ebooks/:slug', requireEbookUploadToken, async (req, res) => {
 
 app.use(express.json({ limit: '64kb' }));
 app.get('/download/:slug', createDownloadHandler());
+
+function getSessionDownloadIssuedAt(session) {
+  const createdSeconds = Number(session?.created);
+  if (Number.isFinite(createdSeconds) && createdSeconds > 0) {
+    return new Date(createdSeconds * 1000);
+  }
+  return new Date();
+}
 
 // Sert le script Klarna à embarquer dans Webflow (source de vérité unique).
 // Update le fichier ici puis push, tout le site prend la nouvelle version.
@@ -1384,6 +1401,7 @@ app.get('/order-data', async (req, res) => {
         customerEmail,
         orderId: session.id,
         req,
+        now: getSessionDownloadIssuedAt(session),
       });
       if (ebookData) {
         ebooks.push(ebookData);
@@ -1411,7 +1429,7 @@ app.get('/order-data', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur récupération données commande:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur récupération données commande' });
   }
 });
 
@@ -1427,15 +1445,23 @@ app.get('/download-links', async (req, res) => {
     // Essayer d'abord avec Stripe UAE
     let session, lineItems, stripe;
     try {
-      session = await stripeUAE.checkout.sessions.retrieve(session_id);
-      lineItems = await stripeUAE.checkout.sessions.listLineItems(session_id);
+      session = await stripeUAE.checkout.sessions.retrieve(session_id, {
+        expand: ['customer_details', 'payment_intent'],
+      });
+      lineItems = await stripeUAE.checkout.sessions.listLineItems(session_id, {
+        expand: ['data.price.product'],
+      });
       stripe = stripeUAE;
     } catch (err) {
       // Si ça échoue, essayer avec Stripe FR
       if (stripeFR) {
         try {
-          session = await stripeFR.checkout.sessions.retrieve(session_id);
-          lineItems = await stripeFR.checkout.sessions.listLineItems(session_id);
+          session = await stripeFR.checkout.sessions.retrieve(session_id, {
+            expand: ['customer_details', 'payment_intent'],
+          });
+          lineItems = await stripeFR.checkout.sessions.listLineItems(session_id, {
+            expand: ['data.price.product'],
+          });
           stripe = stripeFR;
         } catch (err2) {
           return res.status(404).json({ error: 'Session non trouvée' });
@@ -1466,6 +1492,7 @@ app.get('/download-links', async (req, res) => {
         customerEmail,
         orderId: session.id,
         req,
+        now: getSessionDownloadIssuedAt(session),
       });
       
       if (ebookData) {
@@ -1481,7 +1508,7 @@ app.get('/download-links', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur récupération liens:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur récupération liens' });
   }
 });
 

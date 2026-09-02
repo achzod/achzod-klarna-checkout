@@ -96,6 +96,17 @@ async function main() {
     now: new Date('2026-09-02T00:02:00.000Z'),
   }).code, 'expired_token');
 
+  const checkoutAnchored = buildEbookLink('Anabolic Code', {
+    customerEmail: 'client@example.com',
+    orderId: 'checkout_session:cs_old',
+    ttlSeconds: 60,
+    now: new Date('2026-09-02T00:00:00.000Z'),
+  });
+  const checkoutAnchoredToken = new URL(checkoutAnchored.link).searchParams.get('token');
+  assert.equal(verifyDownloadToken(checkoutAnchoredToken, 'anabolic-code', {
+    now: new Date('2026-09-02T00:02:00.000Z'),
+  }).code, 'expired_token');
+
   const token = signDownloadToken({
     slug: 'anabolic-code',
     customerEmail: 'client@example.com',
@@ -112,6 +123,8 @@ async function main() {
     assert.equal(ok.status, 200);
     assert.match(ok.headers['content-type'], /application\/pdf/);
     assert.match(ok.headers['content-disposition'], /attachment; filename="anabolic-code\.pdf"/);
+    assert.equal(ok.headers['x-content-type-options'], 'nosniff');
+    assert.equal(ok.headers['referrer-policy'], 'no-referrer');
     assert.match(ok.body, /%PDF-1\.4/);
 
     const badToken = await request(port, '/download/anabolic-code?token=bad');
@@ -157,6 +170,16 @@ async function main() {
       },
     }, '%PDF-1.4\n');
     assert.equal(rejectedUpload.status, 403);
+
+    const rejectedMagic = await httpRequest(port, {
+      method: 'PUT',
+      path: '/admin/ebooks/potentiel-genetique',
+      headers: {
+        'Content-Type': 'application/pdf',
+        'X-Upload-Token': 'test-upload-token-secret',
+      },
+    }, 'not a pdf');
+    assert.equal(rejectedMagic.status, 415);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

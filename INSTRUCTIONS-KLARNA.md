@@ -229,7 +229,7 @@ Si le panier ne marche pas, utiliser ces liens directs :
 ### EBOOKS
 | Produit | Prix | Lien |
 |---------|------|------|
-| Anabolic Code | 79€ | https://buy.stripe.com/5kQ7sM8AM45t0jeceI4ko0b |
+| Anabolic Code | 59€ | https://buy.stripe.com/5kQ7sM8AM45t0jeceI4ko0b |
 | Libérer son potentiel | 49€ | https://buy.stripe.com/dRmeVe18kcBZfe85Qk4ko0c |
 | 4 Semaines SHRED | 49€ | https://buy.stripe.com/aFaeVe3gsfOb4zuemQ4ko0d |
 | Bioénergétique | 59€ | https://buy.stripe.com/4gMdRa8AM59x4zuemQ4ko0e |

@@ -28,7 +28,7 @@ function log(message, color = 'reset') {
 const PRODUITS_TEST = [
   // Ebooks
   { name: 'EBOOK', price: 4.90, expectedEbook: 'liberer son potentiel' },
-  { name: 'ANABOLIC CODE', price: 7.90, expectedEbook: 'anabolic code' },
+  { name: 'ANABOLIC CODE', price: 59.00, expectedEbook: 'anabolic code' },
   { name: '4 Semaines pour être SHRED', price: 5.90, expectedEbook: '4 semaines pour etre shred' },
   { name: 'Bioénergétique', price: 5.90, expectedEbook: 'bioenergetique' },
   { name: 'Libérer son potentiel génétique en 10 semaines', price: 4.90, expectedEbook: 'liberer son potentiel' },

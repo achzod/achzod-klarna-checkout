@@ -268,6 +268,8 @@ function createDownloadHandler(options = {}) {
       }
       res.setHeader('Cache-Control', 'private, no-store');
       res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('Content-Type', 'application/pdf');
       res.download(filePath, ebook.filename);
     });

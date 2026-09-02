@@ -11,6 +11,7 @@ process.env.STRIPE_SECRET_KEY ||= 'sk_test_dummy';
 process.env.EMAIL_PASS ||= 'dummy';
 process.env.DOWNLOAD_TOKEN_SECRET = 'test-download-token-secret';
 process.env.DOWNLOAD_BASE_URL = 'https://downloads.achzodcoaching.test';
+process.env.EBOOK_UPLOAD_SECRET = 'test-upload-token-secret';
 
 const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'achzod-ebooks-'));
 process.env.EBOOK_STORAGE_DIR = storageDir;
@@ -30,8 +31,18 @@ const {
 const forbiddenExternalDownloadHost = new RegExp(`${['go', 'file'].join('')}|store-${['eu', 'par'].join('-')}`, 'i');
 
 function request(port, targetPath) {
+  return httpRequest(port, { path: targetPath });
+}
+
+function httpRequest(port, options, body = null) {
   return new Promise((resolve, reject) => {
-    http.get({ port, host: '127.0.0.1', path: targetPath }, (res) => {
+    const req = http.request({
+      port,
+      host: '127.0.0.1',
+      method: options.method || 'GET',
+      path: options.path,
+      headers: options.headers || {},
+    }, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => resolve({
@@ -39,7 +50,10 @@ function request(port, targetPath) {
         headers: res.headers,
         body: Buffer.concat(chunks).toString('utf8'),
       }));
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
   });
 }
 
@@ -113,6 +127,36 @@ async function main() {
     });
     const missingFile = await request(port, `/download/bioenergetique-timing-nutrition?token=${encodeURIComponent(missingFileToken)}`);
     assert.equal(missingFile.status, 503);
+
+    const health = await request(port, '/health');
+    const healthBody = JSON.parse(health.body);
+    assert.equal(health.status, 503);
+    assert.equal(healthBody.checks.downloadTokenSecret, true);
+    assert.equal(healthBody.checks.downloadsFiles, false);
+
+    const uploadedPdf = '%PDF-1.4\n% uploaded ebook\n';
+    const upload = await httpRequest(port, {
+      method: 'PUT',
+      path: '/admin/ebooks/bioenergetique-timing-nutrition',
+      headers: {
+        'Content-Type': 'application/pdf',
+        'X-Upload-Token': 'test-upload-token-secret',
+      },
+    }, uploadedPdf);
+    assert.equal(upload.status, 200);
+    const uploadBody = JSON.parse(upload.body);
+    assert.equal(uploadBody.slug, 'bioenergetique-timing-nutrition');
+    assert.equal(fs.readFileSync(path.join(storageDir, 'bioenergetique-timing-nutrition.pdf'), 'utf8'), uploadedPdf);
+
+    const rejectedUpload = await httpRequest(port, {
+      method: 'PUT',
+      path: '/admin/ebooks/potentiel-genetique',
+      headers: {
+        'Content-Type': 'application/pdf',
+        'X-Upload-Token': 'bad-token',
+      },
+    }, '%PDF-1.4\n');
+    assert.equal(rejectedUpload.status, 403);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

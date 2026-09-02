@@ -2,7 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
-const { randomUUID } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const { once } = require('node:events');
+const { createHash, randomUUID, timingSafeEqual } = require('node:crypto');
 const { MemoryFulfillmentStore, RedisFulfillmentStore } = require('./fulfillment-store');
 const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems, resolveProduct } = require('./checkout-security');
 const {
@@ -22,6 +25,7 @@ const {
   EBOOKS,
   buildEbookLink,
   createDownloadHandler,
+  getEbookFilePath,
   getDownloadReadiness,
 } = require('./ebook-downloads');
 
@@ -101,13 +105,86 @@ app.use(cors({
   origin(origin, callback) {
     return callback(null, !origin || ALLOWED_ORIGINS.has(origin));
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Stripe-Signature', 'Authorization', 'X-Checkout-Attempt'],
+  methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Stripe-Signature', 'Authorization', 'X-Checkout-Attempt', 'X-Upload-Token'],
 }));
 
 // Webhook Stripe doit recevoir le body brut
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use('/webhook-klarna', express.raw({ type: 'application/json' }));
+
+function timingSafeStringEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function requireEbookUploadToken(req, res, next) {
+  const expected = String(process.env.EBOOK_UPLOAD_SECRET || '').trim();
+  const provided = String(req.get('x-upload-token') || '').trim();
+  if (!expected) {
+    return res.status(503).json({ error: 'Configuration upload ebook incomplète' });
+  }
+  if (!provided || !timingSafeStringEqual(provided, expected)) {
+    return res.status(403).json({ error: 'Accès refusé' });
+  }
+  next();
+}
+
+app.put('/admin/ebooks/:slug', requireEbookUploadToken, async (req, res) => {
+  const ebook = EBOOKS.find((item) => item.slug === req.params.slug);
+  if (!ebook) return res.status(404).json({ error: 'Ebook introuvable' });
+
+  const contentType = String(req.get('content-type') || '').toLowerCase();
+  if (!contentType.includes('application/pdf')) {
+    return res.status(415).json({ error: 'Seuls les PDFs sont acceptés' });
+  }
+
+  const maxBytes = Number.parseInt(process.env.EBOOK_UPLOAD_MAX_BYTES || '800000000', 10);
+  const targetPath = getEbookFilePath(ebook);
+  const tempPath = `${targetPath}.${randomUUID()}.upload`;
+  const hash = createHash('sha256');
+  let bytes = 0;
+  let stream;
+
+  try {
+    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+    stream = fs.createWriteStream(tempPath, { flags: 'wx' });
+    for await (const chunk of req) {
+      bytes += chunk.length;
+      if (bytes > maxBytes) {
+        const error = new Error('Fichier trop volumineux');
+        error.statusCode = 413;
+        throw error;
+      }
+      hash.update(chunk);
+      if (!stream.write(chunk)) await once(stream, 'drain');
+    }
+    if (!bytes) {
+      const error = new Error('Fichier vide');
+      error.statusCode = 400;
+      throw error;
+    }
+    await new Promise((resolve, reject) => {
+      stream.once('error', reject);
+      stream.end(resolve);
+    });
+    await fs.promises.rename(tempPath, targetPath);
+    res.json({
+      status: 'ok',
+      slug: ebook.slug,
+      filename: ebook.filename,
+      bytes,
+      sha256: hash.digest('hex'),
+    });
+  } catch (error) {
+    if (stream) stream.destroy();
+    await fs.promises.unlink(tempPath).catch(() => {});
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ error: statusCode === 500 ? 'Upload ebook impossible' : error.message });
+  }
+});
+
 app.use(express.json({ limit: '64kb' }));
 app.get('/download/:slug', createDownloadHandler());
 
@@ -1418,6 +1495,7 @@ function healthCheck(req, res) {
     },
   ]));
   const downloads = getDownloadReadiness();
+  const downloadsFiles = Object.values(downloads.files).every((entry) => entry.available);
   const checks = {
     stripeUAE: Boolean(process.env.STRIPE_SECRET_KEY),
     stripeFR: Boolean(process.env.STRIPE_SECRET_KEY_FR),
@@ -1425,6 +1503,7 @@ function healthCheck(req, res) {
     webhookFR: Boolean(process.env.STRIPE_WEBHOOK_SECRET_FR),
     email: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
     downloadTokenSecret: downloads.tokenSecret,
+    downloadsFiles,
     promotionsFR: Object.values(promotionConfig).every((entry) => entry.fr),
     promotionsUAE: Object.values(promotionConfig).every((entry) => entry.uae),
   };

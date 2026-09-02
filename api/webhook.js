@@ -1,19 +1,8 @@
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
+const { buildEbookLink } = require('../ebook-downloads');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-// Mapping des ebooks vers leurs liens de téléchargement
-const EBOOK_DOWNLOADS = {
-  'anabolic code': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
-  'libérer son potentiel génétique': 'https://gofile.io/d/gWybQ6',
-  'liberer son potentiel genetique': 'https://gofile.io/d/gWybQ6',
-  '4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
-  '4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
-  'bioénergétique': 'https://gofile.io/d/Hn6GE1',
-  'bioenergetique': 'https://gofile.io/d/Hn6GE1',
-  'bioénergétique et timing': 'https://gofile.io/d/Hn6GE1',
-};
 
 // Configuration email
 const transporter = nodemailer.createTransport({
@@ -24,20 +13,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-function findEbookLink(productName) {
-  const cleanName = productName.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .trim();
-
-  for (const [key, link] of Object.entries(EBOOK_DOWNLOADS)) {
-    const cleanKey = key.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    
-    if (cleanName.includes(cleanKey) || cleanKey.includes(cleanName)) {
-      return { name: productName, link };
-    }
-  }
-  return null;
+function findEbookLink(productName, options = {}) {
+  return buildEbookLink(productName, options);
 }
 
 function generateCoachingEmailHTML(customerName, items, totalAmount) {
@@ -499,7 +476,10 @@ module.exports = async (req, res) => {
       if (fullSession.line_items?.data) {
         for (const item of fullSession.line_items.data) {
           const productName = item.description || item.price?.product?.name || '';
-          const ebookInfo = findEbookLink(productName);
+          const ebookInfo = findEbookLink(productName, {
+            customerEmail,
+            orderId: fullSession.id,
+          });
           
           if (ebookInfo) {
             ebooks.push(ebookInfo);
@@ -533,7 +513,6 @@ module.exports = async (req, res) => {
 
   return res.status(200).json({ received: true });
 };
-
 
 
 

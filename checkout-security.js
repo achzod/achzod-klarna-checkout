@@ -57,7 +57,9 @@ function resolveProduct(value) {
   // Webflow peut concaténer le nom, le prix, la quantité et même du HTML
   // encodé dans descriptionwrapper. On identifie alors la formule à partir
   // des marqueurs stables (gamme + durée), sans utiliser le reste du texte.
+  const rawLabel = normalizeProductName(value);
   const label = normalizeCheckoutLabel(value);
+  const hasCheckoutNoise = /\b(?:ebook|coaching|qte|eur|usd|aed|\d+)\b/.test(rawLabel);
   // Webflow colle parfois la devise et la durée: "EUR8 semaines".
   const durationMatch = label.match(/(?:^|[^0-9])(4|8|12)\s+semaines?\b/);
   const duration = durationMatch ? Number(durationMatch[1]) : null;
@@ -67,7 +69,7 @@ function resolveProduct(value) {
   else if (label.includes('essential') && duration) canonicalName = `Essential ${duration} semaines`;
   else if (label.includes('elite') && duration) canonicalName = `Elite ${duration} semaines`;
   else if (label.includes('coaching sans suivi')) canonicalName = 'Coaching sans suivi';
-  else if (label.includes('anabolic code')) canonicalName = 'Anabolic Code';
+  else if (label.includes('anabolic code') && hasCheckoutNoise) canonicalName = 'Anabolic Code';
   else if (label.includes('bioenergetique')) canonicalName = 'Bioénergétique et timing de la nutrition';
   else if (label.includes('liberer son potentiel')) canonicalName = 'Libérer son potentiel génétique';
   else if (label.includes('shred')) canonicalName = '4 semaines pour être SHRED';
@@ -89,12 +91,6 @@ function normalizePromotionCode(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 64);
 }
 
-// Remise maximale autorisée sur le total client (protection anti-fraude basique).
-const MIN_TOTAL_RATIO = 0.10;      // total client >= 10% du sous-total
-const MIN_TOTAL_CENTS = 100;       // et jamais < 1€
-const MIN_UNIT_PRICE_CENTS = 500;  // 5€
-const MAX_UNIT_PRICE_CENTS = 500000; // 5000€
-
 function toCentsFromNumber(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -102,7 +98,116 @@ function toCentsFromNumber(value) {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
-function validateAndPriceCart(body) {
+const DEFAULT_PROMOTION_RULES = Object.freeze({
+  BIOSCAN59: Object.freeze({ code: 'BIOSCAN59', amountOff: 5900 }),
+  ULTIMATE79: Object.freeze({ code: 'ULTIMATE79', amountOff: 7900 }),
+  BLOOD99: Object.freeze({ code: 'BLOOD99', amountOff: 9900 }),
+  FAQ50: Object.freeze({ code: 'FAQ50', percentOff: 50, appliesTo: 'ebooks' }),
+  ZOD20: Object.freeze({ code: 'ZOD20', percentOff: 20 }),
+});
+
+function getPromotionRules(overrides = {}) {
+  const normalized = { ...DEFAULT_PROMOTION_RULES };
+  for (const [key, rule] of Object.entries(overrides || {})) {
+    const code = normalizePromotionCode(rule?.code || key);
+    if (!code) continue;
+    normalized[code] = { ...rule, code };
+  }
+  return normalized;
+}
+
+function promotionApplies(rule, items) {
+  if (rule.appliesTo === 'ebooks') return items.every((item) => item.kind === 'ebook');
+  if (rule.appliesTo === 'coaching') return items.every((item) => item.kind === 'coaching');
+  return true;
+}
+
+function discountForRule(rule, items, subtotalCents) {
+  if (!promotionApplies(rule, items)) {
+    throw new CheckoutValidationError(`Le code promo ${rule.code} ne s’applique pas à ce panier`);
+  }
+  if (Number.isFinite(Number(rule.amountOff))) {
+    const discount = Math.round(Number(rule.amountOff));
+    if (discount <= 0 || discount >= subtotalCents) {
+      throw new CheckoutValidationError(`Le code promo ${rule.code} ne s’applique pas à ce panier`);
+    }
+    return discount;
+  }
+  if (Number.isFinite(Number(rule.percentOff))) {
+    const percent = Number(rule.percentOff);
+    if (percent <= 0 || percent >= 100) throw new CheckoutValidationError(`Code promo ${rule.code} invalide`);
+    return Math.round(subtotalCents * percent / 100);
+  }
+  throw new CheckoutValidationError(`Code promo ${rule.code} invalide`);
+}
+
+function subtotalForItems(items) {
+  return items.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+}
+
+function parseClientTotalCents(body) {
+  if (body.totalAmount === undefined || body.totalAmount === null || body.totalAmount === '') return null;
+  const clientTotal = Number(body.totalAmount);
+  if (!Number.isFinite(clientTotal) || clientTotal <= 0) {
+    throw new CheckoutValidationError('Total transmis invalide');
+  }
+  return Math.round(clientTotal * 100);
+}
+
+function shouldSearchQuantityRepair(originalItems) {
+  if (!originalItems.length || originalItems.some((item) => item.kind !== 'coaching')) return false;
+  const quantities = originalItems.map((item) => item.quantity);
+  if (quantities.every((quantity) => quantity === 1)) return true;
+  return quantities.every((quantity) => quantity === quantities[0] && quantity > 1);
+}
+
+function enumerateQuantitySolutions(items, clientTotalCents, promotionRules, requestedCode) {
+  if (!shouldSearchQuantityRepair(items)) return [];
+  const rules = requestedCode
+    ? [promotionRules[requestedCode]].filter(Boolean)
+    : [null, ...Object.values(promotionRules)];
+  const solutions = [];
+  const working = items.map((item) => ({ ...item }));
+
+  function visit(index) {
+    if (index === working.length) {
+      const subtotalCents = subtotalForItems(working);
+      for (const rule of rules) {
+        let discountCents = 0;
+        let promotionCode = null;
+        if (rule) {
+          try {
+            discountCents = discountForRule(rule, working, subtotalCents);
+          } catch (error) {
+            continue;
+          }
+          promotionCode = rule.code;
+        }
+        if (subtotalCents - discountCents === clientTotalCents) {
+          solutions.push({
+            items: working.map((item) => ({ ...item })),
+            subtotalCents,
+            discountCents,
+            totalCents: clientTotalCents,
+            promotionCode,
+          });
+        }
+      }
+      return;
+    }
+
+    for (let quantity = 1; quantity <= 10; quantity += 1) {
+      working[index].quantity = quantity;
+      visit(index + 1);
+      if (solutions.length > 1) return;
+    }
+  }
+
+  visit(0);
+  return solutions;
+}
+
+function validateAndPriceCart(body, promotionOverrides = {}) {
   if (!body || !Array.isArray(body.items) || body.items.length === 0) {
     throw new CheckoutValidationError('Panier vide');
   }
@@ -122,45 +227,69 @@ function validateAndPriceCart(body) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
       throw new CheckoutValidationError(`Quantité invalide pour ${product.name}`);
     }
-    // Prix unitaire : Webflow est source de vérité (les prix affichés peuvent
-    // avoir été mis à jour côté site sans update backend). Fallback catalogue.
-    // Bornes raisonnables pour éviter les abus flagrants.
-    const clientCents = toCentsFromNumber(item.price);
-    let unitAmount = clientCents !== null ? clientCents : product.amount;
-    if (unitAmount < MIN_UNIT_PRICE_CENTS) unitAmount = MIN_UNIT_PRICE_CENTS;
-    if (unitAmount > MAX_UNIT_PRICE_CENTS) unitAmount = MAX_UNIT_PRICE_CENTS;
-    return { ...product, quantity, amount: unitAmount };
+    return { ...product, quantity, amount: product.amount };
   });
 
-  const subtotalCents = pricedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+  let subtotalCents = subtotalForItems(pricedItems);
   if (!Number.isSafeInteger(subtotalCents) || subtotalCents <= 0) {
     throw new CheckoutValidationError('Total du panier invalide');
   }
 
   const requestedCode = normalizePromotionCode(body.discountCode || body.promoCode) || null;
-
-  let clientTotalCents = null;
-  if (body.totalAmount !== undefined && body.totalAmount !== null && body.totalAmount !== '') {
-    const clientTotal = Number(body.totalAmount);
-    if (!Number.isFinite(clientTotal) || clientTotal <= 0) {
-      throw new CheckoutValidationError('Total transmis invalide');
-    }
-    clientTotalCents = Math.round(clientTotal * 100);
+  const promotionRules = getPromotionRules(promotionOverrides);
+  if (requestedCode && !promotionRules[requestedCode]) {
+    throw new CheckoutValidationError(`Code promo inconnu: ${requestedCode}`);
   }
+  const clientTotalCents = parseClientTotalCents(body);
 
   let discountCents = 0;
   let totalCents = subtotalCents;
   let clientTotalIgnored = false;
+  let promotionCode = requestedCode;
 
-  if (clientTotalCents !== null && clientTotalCents < subtotalCents) {
-    const floor = Math.max(MIN_TOTAL_CENTS, Math.round(subtotalCents * MIN_TOTAL_RATIO));
-    if (clientTotalCents < floor) {
-      // Total suspicieusement bas -> on ignore la remise, on garde le prix plein.
-      // La commande passe quand même pour ne jamais bloquer une vente.
-      clientTotalIgnored = true;
-    } else {
-      discountCents = subtotalCents - clientTotalCents;
+  if (clientTotalCents !== null) {
+    const quantitySolutions = enumerateQuantitySolutions(pricedItems, clientTotalCents, promotionRules, requestedCode);
+    if (quantitySolutions.length === 1) {
+      const solution = quantitySolutions[0];
+      pricedItems.splice(0, pricedItems.length, ...solution.items);
+      subtotalCents = solution.subtotalCents;
+      discountCents = solution.discountCents;
+      totalCents = solution.totalCents;
+      promotionCode = solution.promotionCode;
+    }
+  }
+
+  if (totalCents === subtotalCents && requestedCode) {
+    const rule = promotionRules[requestedCode];
+    discountCents = discountForRule(rule, pricedItems, subtotalCents);
+    totalCents = subtotalCents - discountCents;
+    if (clientTotalCents !== null && clientTotalCents !== totalCents) {
+      throw new CheckoutValidationError('Total incohérent avec le code promo autorisé');
+    }
+  }
+
+  if (clientTotalCents !== null && totalCents === subtotalCents) {
+    if (clientTotalCents === subtotalCents) {
       totalCents = clientTotalCents;
+    } else if (clientTotalCents < subtotalCents) {
+      const inferredRule = Object.values(promotionRules).find((rule) => {
+        try {
+          return subtotalCents - discountForRule(rule, pricedItems, subtotalCents) === clientTotalCents;
+        } catch (error) {
+          return false;
+        }
+      });
+      if (inferredRule) {
+        discountCents = discountForRule(inferredRule, pricedItems, subtotalCents);
+        totalCents = clientTotalCents;
+        promotionCode = inferredRule.code;
+      } else if (pricedItems.length > 1 && pricedItems.every((item) => item.kind === 'coaching') && !pricedItems.some((item) => item.quantity > 1)) {
+        clientTotalIgnored = true;
+      } else {
+        throw new CheckoutValidationError('Total transmis inférieur au prix catalogue');
+      }
+    } else {
+      throw new CheckoutValidationError('Total transmis sans code promo autorisé');
     }
   }
 
@@ -169,7 +298,7 @@ function validateAndPriceCart(body) {
     subtotalCents,
     totalCents,
     discountCents,
-    promotionCode: requestedCode,
+    promotionCode,
     clientTotalIgnored,
   };
 }

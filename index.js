@@ -18,6 +18,12 @@ const {
   buildIdempotencyKey,
   validateCustomerEmail,
 } = require('./checkout-runtime');
+const {
+  EBOOKS,
+  buildEbookLink,
+  createDownloadHandler,
+  getDownloadReadiness,
+} = require('./ebook-downloads');
 
 // Crée un coupon Stripe à usage unique pour la remise client (n'importe quel
 // code promo/total remisé) puis retourne l'id du coupon prêt à être attaché à
@@ -80,53 +86,6 @@ async function sendMailWithTimeout(mailOptions, timeoutMs = SMTP_SEND_TIMEOUT_MS
   }
 }
 
-// Liens de téléchargement des ebooks
-const EBOOK_LINKS = {
-  // Anabolic Code
-  'anabolic code': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
-  'anabolic': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
-  'code anabolic': 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf',
-  
-  // Libérer son potentiel génétique
-  'liberer son potentiel genetique': 'https://gofile.io/d/gWybQ6',
-  'liberer son potentiel génétique': 'https://gofile.io/d/gWybQ6',
-  'libérer son potentiel génétique': 'https://gofile.io/d/gWybQ6',
-  'libérer son potentiel génétique en 10 semaines': 'https://gofile.io/d/gWybQ6',
-  'liberer son potentiel genetique en 10 semaines': 'https://gofile.io/d/gWybQ6',
-  'liberer son potentiel': 'https://gofile.io/d/gWybQ6',
-  'libérer son potentiel': 'https://gofile.io/d/gWybQ6',
-  'potentiel genetique': 'https://gofile.io/d/gWybQ6',
-  'potentiel génétique': 'https://gofile.io/d/gWybQ6',
-  '10 semaines': 'https://gofile.io/d/gWybQ6',
-  
-  // 4 Semaines Shred - TOUTES LES VARIANTES POSSIBLES
-  '4 semaines pour etre shred perte de gras et prise de muscles': 'https://gofile.io/d/5SylgY',
-  '4 semaines pour être shred perte de gras et prise de muscles': 'https://gofile.io/d/5SylgY',
-  'ebook 49 00 eur 4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
-  'ebook 49 00 eur 4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
-  'ebook 4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
-  'ebook 4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
-  '4 semaines pour etre shred': 'https://gofile.io/d/5SylgY',
-  '4 semaines pour être shred': 'https://gofile.io/d/5SylgY',
-  'perte de gras et prise de muscles': 'https://gofile.io/d/5SylgY',
-  '4 semaines shred': 'https://gofile.io/d/5SylgY',
-  'semaines shred': 'https://gofile.io/d/5SylgY',
-  'pour etre shred': 'https://gofile.io/d/5SylgY',
-  'pour être shred': 'https://gofile.io/d/5SylgY',
-  'perte de gras': 'https://gofile.io/d/5SylgY',
-  'prise de muscles': 'https://gofile.io/d/5SylgY',
-  '4 semaines': 'https://gofile.io/d/5SylgY',
-  'shred': 'https://gofile.io/d/5SylgY',
-  
-  // Bioénergétique
-  'bioenergetique': 'https://gofile.io/d/Hn6GE1',
-  'bioénergétique': 'https://gofile.io/d/Hn6GE1',
-  'bioenergetique et timing': 'https://gofile.io/d/Hn6GE1',
-  'bioénergétique et timing': 'https://gofile.io/d/Hn6GE1',
-  'bioenergetique timing': 'https://gofile.io/d/Hn6GE1',
-  'bioénergétique timing': 'https://gofile.io/d/Hn6GE1',
-};
-
 const ALLOWED_ORIGINS = new Set([
   'https://achzodcoaching.com',
   'https://www.achzodcoaching.com',
@@ -150,6 +109,7 @@ app.use(cors({
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use('/webhook-klarna', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '64kb' }));
+app.get('/download/:slug', createDownloadHandler());
 
 // Sert le script Klarna à embarquer dans Webflow (source de vérité unique).
 // Update le fichier ici puis push, tout le site prend la nouvelle version.
@@ -509,22 +469,6 @@ function normalizeProductLabel(value) {
     .trim();
 }
 
-const CANONICAL_EBOOK_LINKS = new Map([
-  ['Anabolic Code', 'https://store-eu-par-2.gofile.io/download/direct/731fdd33-9c47-4385-9fd5-4b8b1ed230a0/ANABOLIC%20CODE.pdf'],
-  ['Libérer son potentiel génétique', 'https://gofile.io/d/gWybQ6'],
-  ['4 semaines pour être SHRED', 'https://gofile.io/d/5SylgY'],
-  ['Bioénergétique et timing de la nutrition', 'https://gofile.io/d/Hn6GE1'],
-]);
-
-const GENERIC_MATCH_WORDS = new Set(['ebook', 'ebooks', 'semaines', 'semaine']);
-const GENERIC_EBOOK_KEYS = new Set([
-  '4 semaines',
-  '10 semaines',
-  'semaines shred',
-  'perte de gras',
-  'prise de muscles',
-  'shred',
-]);
 const NON_EBOOK_HINTS = [
   'coaching',
   'suivi',
@@ -538,7 +482,7 @@ const NON_EBOOK_HINTS = [
 ];
 
 // Fonction pour trouver le lien ebook
-function findEbookLink(productName) {
+function findEbookLink(productName, options = {}) {
   if (!productName) return null;
 
   const resolvedProduct = resolveProduct(productName);
@@ -548,10 +492,10 @@ function findEbookLink(productName) {
       return null;
     }
 
-    const canonicalLink = CANONICAL_EBOOK_LINKS.get(resolvedProduct.name);
-    if (canonicalLink) {
-      console.log('✅ Ebook catalogue trouvé:', resolvedProduct.name, '->', canonicalLink);
-      return { name: resolvedProduct.name, link: canonicalLink };
+    const ebookLink = buildEbookLink(resolvedProduct.name, options);
+    if (ebookLink) {
+      console.log('✅ Ebook catalogue trouvé:', resolvedProduct.name, '->', ebookLink.slug);
+      return ebookLink;
     }
   }
 
@@ -568,39 +512,10 @@ function findEbookLink(productName) {
   
   console.log('🔍 Recherche ebook pour:', productName, '-> nettoyé:', cleanName);
   
-  // Chercher une correspondance exacte ou partielle
-  // On teste d'abord les correspondances les plus longues pour éviter les faux positifs
-  const sortedKeys = Object.keys(EBOOK_LINKS).sort((a, b) => b.length - a.length);
-  
-  for (const key of sortedKeys) {
-    const cleanKey = normalizeProductLabel(key);
-    const isGenericKey = GENERIC_EBOOK_KEYS.has(cleanKey);
-    
-    // Correspondance si le nom contient la clé ou vice versa
-    // On vérifie aussi les mots-clés individuels pour plus de flexibilité
-    const nameWords = cleanName.split(/\s+/).filter((w) => w.length > 2 && !GENERIC_MATCH_WORDS.has(w));
-    const keyWords = cleanKey.split(/\s+/).filter((w) => w.length > 2 && !GENERIC_MATCH_WORDS.has(w));
-    
-    const hasFullMatch = cleanName.includes(cleanKey) || cleanKey.includes(cleanName);
-    const sharedWordCount = nameWords.filter((nw) => keyWords.some((kw) => nw.includes(kw) || kw.includes(nw))).length;
-    const hasWordMatch = sharedWordCount >= 2;
-    
-    // Pour "shred", "perte de gras", "prise de muscles" - correspondance plus flexible
-    const isShredRelated = (cleanName.includes('shred') || cleanName.includes('perte') || cleanName.includes('gras') || cleanName.includes('muscles')) &&
-                          (cleanKey.includes('shred') || cleanKey.includes('perte') || cleanKey.includes('gras') || cleanKey.includes('muscles'));
-    
-    // Si le nom contient "ebook" ET "shred" ou "4 semaines", c'est probablement le bon ebook
-    const isEbookShred = cleanName.includes('ebook') && (cleanName.includes('shred') || cleanName.includes('4 semaines') || cleanName.includes('semaines')) &&
-                        (cleanKey.includes('shred') || cleanKey.includes('4 semaines') || cleanKey.includes('semaines'));
-    
-    if (isGenericKey && !isEbookShred && !cleanName.includes('shred')) {
-      continue;
-    }
-
-    if (hasFullMatch || (hasWordMatch && nameWords.length >= 2) || isShredRelated || isEbookShred) {
-      console.log('✅ Ebook trouvé:', key, '->', EBOOK_LINKS[key]);
-      return { name: productName, link: EBOOK_LINKS[key] };
-    }
+  const ebookLink = buildEbookLink(productName, options);
+  if (ebookLink) {
+    console.log('✅ Ebook trouvé:', productName, '->', ebookLink.slug);
+    return ebookLink;
   }
   
   console.log('❌ Aucun ebook trouvé pour:', productName);
@@ -1104,7 +1019,7 @@ async function fulfillPaidCheckout(stripe, sessionId, paymentMethod, options = {
     const rawName = item.description || item.price?.nickname || 'Produit';
     const displayName = item.quantity > 1 ? `${rawName} x${item.quantity}` : rawName;
     productNames.push(displayName);
-    const ebookData = findEbookLink(rawName);
+    const ebookData = findEbookLink(rawName, { customerEmail, orderId: identity });
     if (ebookData) ebooks.push(ebookData);
   }
 
@@ -1196,7 +1111,10 @@ async function fulfillCapturedPayPalOrder(order, options = {}) {
   const sendCustomer = options.sendCustomerOrderEmail || sendCustomerOrderEmail;
   const now = options.now || (() => new Date());
   const ebooks = summary.productNames
-    .map((name) => findEbookLink(name))
+    .map((name) => findEbookLink(name, {
+      customerEmail: summary.customerEmail,
+      orderId: summary.identity,
+    }))
     .filter(Boolean);
 
   const adminResult = await deliverClaimedSideEffect({
@@ -1361,6 +1279,8 @@ app.get('/order-data', async (req, res) => {
       return res.status(400).json({ error: 'Paiement non complété' });
     }
 
+    const customerEmail = session.customer_details?.email || session.customer_email;
+    const customerName = session.customer_details?.name || '';
     const ebooks = [];
     const productNames = [];
     const items = [];
@@ -1383,7 +1303,11 @@ app.get('/order-data', async (req, res) => {
         quantity: quantity
       });
       
-      const ebookData = findEbookLink(productName);
+      const ebookData = findEbookLink(productName, {
+        customerEmail,
+        orderId: session.id,
+        req,
+      });
       if (ebookData) {
         ebooks.push(ebookData);
       }
@@ -1391,8 +1315,6 @@ app.get('/order-data', async (req, res) => {
 
     const totalAmount = (session.amount_total / 100).toFixed(2);
     const currency = session.currency.toUpperCase();
-    const customerEmail = session.customer_details?.email || session.customer_email;
-    const customerName = session.customer_details?.name || '';
 
     res.json({
       success: true,
@@ -1450,6 +1372,7 @@ app.get('/download-links', async (req, res) => {
       return res.status(400).json({ error: 'Paiement non complété' });
     }
 
+    const customerEmail = session.customer_details?.email || session.customer_email;
     const ebooks = [];
     const productNames = [];
     
@@ -1462,7 +1385,11 @@ app.get('/download-links', async (req, res) => {
                           'Produit';
       console.log('📦 Produit trouvé (download-links):', productName);
       productNames.push(productName);
-      const ebookData = findEbookLink(productName);
+      const ebookData = findEbookLink(productName, {
+        customerEmail,
+        orderId: session.id,
+        req,
+      });
       
       if (ebookData) {
         ebooks.push(ebookData);
@@ -1490,12 +1417,14 @@ function healthCheck(req, res) {
       uae: Boolean(process.env[`STRIPE_UAE_PROMO_${code}`]),
     },
   ]));
+  const downloads = getDownloadReadiness();
   const checks = {
     stripeUAE: Boolean(process.env.STRIPE_SECRET_KEY),
     stripeFR: Boolean(process.env.STRIPE_SECRET_KEY_FR),
     webhookUAE: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     webhookFR: Boolean(process.env.STRIPE_WEBHOOK_SECRET_FR),
     email: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
+    downloadTokenSecret: downloads.tokenSecret,
     promotionsFR: Object.values(promotionConfig).every((entry) => entry.fr),
     promotionsUAE: Object.values(promotionConfig).every((entry) => entry.uae),
   };
@@ -1505,7 +1434,9 @@ function healthCheck(req, res) {
     green,
     checks,
     promotionConfig,
+    downloads,
     catalogProducts: PRODUCTS.length,
+    ebookProducts: EBOOKS.length,
     starterRemoved: !PRODUCTS.some((product) => product.name.toLowerCase() === 'starter'),
     timestamp: new Date().toISOString(),
   });
@@ -1743,7 +1674,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+  EBOOKS,
   app,
+  buildEbookLink,
   createStripeWebhookHandler,
   findEbookLink,
   fulfillCapturedPayPalOrder,

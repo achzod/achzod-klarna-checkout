@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node test-checkout-security.js && node test-checkout-runtime.js && node test-order-matching.js && node test-paypal-client.js && node test-webhook-idempotency.js",
+    "test": "node test-checkout-security.js && node test-checkout-runtime.js && node test-order-matching.js && node test-product-routing.js && node test-ebook-downloads.js && node test-paypal-client.js && node test-webhook-idempotency.js",
     "test:webhook": "node test-webhook-idempotency.js",
     "test:routing": "node test-order-matching.js && node test-product-routing.js",
     "test:live": "node test-complet-systeme.js"

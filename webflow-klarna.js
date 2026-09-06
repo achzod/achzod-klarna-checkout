@@ -428,10 +428,11 @@
     var style = document.createElement('style');
     style.id = 'achzod-coaching-whatsapp-hub-styles';
     style.textContent = [
-      '#achzod-coaching-whatsapp-hub{position:fixed;right:18px;bottom:18px;z-index:2147483000;font-family:proxima-nova,Arial,sans-serif;color:#fff}',
+      '#achzod-coaching-whatsapp-hub{position:fixed;right:18px;bottom:104px;z-index:2147483000;font-family:proxima-nova,Arial,sans-serif;color:#fff}',
       '#achzod-coaching-whatsapp-hub *{box-sizing:border-box}',
-      '#achzod-coaching-wa-card{display:none;width:min(360px,calc(100vw - 28px));margin-bottom:12px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:#101114;box-shadow:0 22px 60px rgba(0,0,0,.36);overflow:hidden}',
+      '#achzod-coaching-wa-card{display:none;width:min(360px,calc(100vw - 28px));max-height:calc(100vh - 140px);margin-bottom:12px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:#101114;box-shadow:0 22px 60px rgba(0,0,0,.36);overflow:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch}',
       '#achzod-coaching-wa-card.is-open{display:block}',
+      '#achzod-coaching-wa-card.is-open+.achzod-coaching-wa-pulse{display:none}',
       '.achzod-coaching-wa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 16px 10px;background:linear-gradient(135deg,#14181a,#102316)}',
       '.achzod-coaching-wa-kicker{margin:0 0 5px;color:#7cf4a8;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}',
       '.achzod-coaching-wa-title{margin:0;color:#fff;font-size:18px;font-weight:900;line-height:1.08}',
@@ -448,9 +449,10 @@
       '.achzod-coaching-wa-pulse span:first-child{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.38);font-size:19px}',
       '.achzod-coaching-wa-pulse small{display:block;color:rgba(7,20,11,.72);font-size:11px;font-weight:800;text-align:left}',
       '.achzod-coaching-wa-pulse strong{display:block;font-size:14px;line-height:1;text-align:left}',
-      '@media(max-width:520px){#achzod-coaching-whatsapp-hub{right:12px;bottom:12px}.achzod-coaching-wa-row{grid-template-columns:1fr}.achzod-coaching-wa-pulse{padding-right:14px}}'
+      '@media(max-width:520px){html.achzod-wa-hub-mounted .apexlabs-sticky{display:none!important}#achzod-coaching-whatsapp-hub{left:12px;right:auto;bottom:96px}.achzod-coaching-wa-card{width:calc(100vw - 24px);max-height:calc(100vh - 128px);margin-bottom:0}.achzod-coaching-wa-row{grid-template-columns:1fr}.achzod-coaching-wa-pulse{padding-right:14px}}'
     ].join('');
     document.head.appendChild(style);
+    document.documentElement.classList.add('achzod-wa-hub-mounted');
 
     var hub = document.createElement('div');
     hub.id = 'achzod-coaching-whatsapp-hub';

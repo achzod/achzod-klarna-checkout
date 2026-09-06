@@ -338,6 +338,193 @@
     }
   }
 
+  function currentPageLabel() {
+    var path = String(window.location.pathname || '/');
+    var title = String(document.title || '').replace(/\s+/g, ' ').trim();
+    if (/\/coaching/i.test(path)) return 'Page coaching';
+    if (/\/product|\/produit|\/checkout|\/cart|\/panier/i.test(path)) return 'Page offre / panier';
+    if (/\/blog|\/articles?/i.test(path)) return 'Article / contenu Achzod';
+    return title ? title.slice(0, 80) : 'achzodcoaching.com';
+  }
+
+  function readUtmParams() {
+    var params = new URLSearchParams(window.location.search || '');
+    var utm = {};
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach(function (key) {
+      var value = params.get(key);
+      if (value) utm[key] = value.slice(0, 160);
+    });
+    return utm;
+  }
+
+  function buildCoachingWhatsAppMessage(data) {
+    var lines = [
+      'Salut Achzod, je viens de ton site coaching.',
+      '',
+      'Page : ' + currentPageLabel()
+    ];
+    if (data.goal) lines.push('Objectif : ' + data.goal);
+    if (data.blocker) lines.push('Blocage : ' + data.blocker);
+    if (data.urgency) lines.push('Timing : ' + data.urgency);
+    if (data.email) lines.push('Email : ' + data.email);
+    if (data.phone) lines.push('Tel : ' + data.phone);
+    if (data.details) lines.push('Contexte : ' + data.details);
+    lines.push('', 'Tu peux me dire si je dois partir sur coaching, APEXLABS ou les deux ?');
+    return lines.join('\n');
+  }
+
+  function openCoachingWhatsApp(data) {
+    window.open(
+      'https://wa.me/971585210514?text=' + encodeURIComponent(buildCoachingWhatsAppMessage(data || {})),
+      '_blank',
+      'noopener,noreferrer'
+    );
+  }
+
+  function trackCoachingLead(payload) {
+    var safePayload = Object.assign({
+      eventType: 'click',
+      offer: 'Achzod Coaching',
+      tier: 'coaching_direct',
+      page: currentPageLabel(),
+      placement: 'achzodcoaching_global',
+      sourceUrl: String(window.location.href || '').slice(0, 500),
+      referrer: String(document.referrer || '').slice(0, 500),
+      utm: readUtmParams()
+    }, payload || {});
+
+    try {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', safePayload.eventType === 'form' ? 'generate_lead' : 'contact', {
+          event_category: 'coaching_whatsapp',
+          event_label: safePayload.placement,
+          offer: safePayload.offer
+        });
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof window.fbq === 'function') {
+        window.fbq('track', safePayload.eventType === 'form' ? 'Lead' : 'Contact', {
+          content_name: safePayload.offer,
+          content_category: 'coaching'
+        });
+      }
+    } catch (_) {}
+
+    try {
+      fetch('https://apexlabs.achzodcoaching.com/api/track/whatsapp-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify(safePayload)
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
+  function injectCoachingWhatsAppHub() {
+    if (document.getElementById('achzod-coaching-whatsapp-hub')) return;
+
+    var style = document.createElement('style');
+    style.id = 'achzod-coaching-whatsapp-hub-styles';
+    style.textContent = [
+      '#achzod-coaching-whatsapp-hub{position:fixed;right:18px;bottom:18px;z-index:2147483000;font-family:proxima-nova,Arial,sans-serif;color:#fff}',
+      '#achzod-coaching-whatsapp-hub *{box-sizing:border-box}',
+      '#achzod-coaching-wa-card{display:none;width:min(360px,calc(100vw - 28px));margin-bottom:12px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:#101114;box-shadow:0 22px 60px rgba(0,0,0,.36);overflow:hidden}',
+      '#achzod-coaching-wa-card.is-open{display:block}',
+      '.achzod-coaching-wa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 16px 10px;background:linear-gradient(135deg,#14181a,#102316)}',
+      '.achzod-coaching-wa-kicker{margin:0 0 5px;color:#7cf4a8;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}',
+      '.achzod-coaching-wa-title{margin:0;color:#fff;font-size:18px;font-weight:900;line-height:1.08}',
+      '.achzod-coaching-wa-sub{margin:6px 0 0;color:rgba(255,255,255,.78);font-size:13px;line-height:1.35}',
+      '.achzod-coaching-wa-close{width:30px;height:30px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:20px;line-height:1;cursor:pointer}',
+      '.achzod-coaching-wa-form{display:grid;gap:9px;padding:13px 16px 16px}',
+      '.achzod-coaching-wa-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}',
+      '.achzod-coaching-wa-form input,.achzod-coaching-wa-form select,.achzod-coaching-wa-form textarea{width:100%;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:#181a1f;color:#fff;padding:11px 12px;font:600 13px proxima-nova,Arial,sans-serif;outline:none}',
+      '.achzod-coaching-wa-form textarea{min-height:70px;resize:vertical}',
+      '.achzod-coaching-wa-form input::placeholder,.achzod-coaching-wa-form textarea::placeholder{color:rgba(255,255,255,.46)}',
+      '.achzod-coaching-wa-error{display:none;color:#ffb2b2;font-size:12px;font-weight:700;line-height:1.3}',
+      '.achzod-coaching-wa-submit{border:0;border-radius:11px;background:#25d366;color:#07140b;padding:12px 14px;font-size:14px;font-weight:950;cursor:pointer;box-shadow:0 12px 26px rgba(37,211,102,.28)}',
+      '.achzod-coaching-wa-pulse{display:flex;align-items:center;gap:10px;min-height:56px;border:0;border-radius:999px;background:#25d366;color:#07140b;padding:10px 16px 10px 12px;font-weight:950;box-shadow:0 16px 42px rgba(37,211,102,.34);cursor:pointer}',
+      '.achzod-coaching-wa-pulse span:first-child{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.38);font-size:19px}',
+      '.achzod-coaching-wa-pulse small{display:block;color:rgba(7,20,11,.72);font-size:11px;font-weight:800;text-align:left}',
+      '.achzod-coaching-wa-pulse strong{display:block;font-size:14px;line-height:1;text-align:left}',
+      '@media(max-width:520px){#achzod-coaching-whatsapp-hub{right:12px;bottom:12px}.achzod-coaching-wa-row{grid-template-columns:1fr}.achzod-coaching-wa-pulse{padding-right:14px}}'
+    ].join('');
+    document.head.appendChild(style);
+
+    var hub = document.createElement('div');
+    hub.id = 'achzod-coaching-whatsapp-hub';
+    hub.innerHTML = [
+      '<div id="achzod-coaching-wa-card" role="dialog" aria-label="Orientation coaching WhatsApp">',
+      '<div class="achzod-coaching-wa-head">',
+      '<div><p class="achzod-coaching-wa-kicker">Orientation gratuite</p>',
+      '<p class="achzod-coaching-wa-title">Tu veux le coaching ? Envoie ton cas.</p>',
+      '<p class="achzod-coaching-wa-sub">Laisse ton contact + ton blocage. Le message WhatsApp part deja structure pour te router vite.</p></div>',
+      '<button type="button" class="achzod-coaching-wa-close" aria-label="Fermer">x</button>',
+      '</div>',
+      '<form class="achzod-coaching-wa-form">',
+      '<div class="achzod-coaching-wa-row"><input name="email" type="email" placeholder="Email"><input name="phone" type="tel" placeholder="WhatsApp / tel"></div>',
+      '<input name="goal" required placeholder="Objectif principal">',
+      '<select name="blocker" required><option value="">Blocage principal</option><option>Perte de gras bloquee</option><option>Prise de muscle / recomp</option><option>Manque de cadre et suivi</option><option>Energie / sommeil / hormones</option><option>Je ne sais pas quoi choisir</option></select>',
+      '<select name="urgency" required><option value="">Timing</option><option>Maintenant</option><option>Cette semaine</option><option>Ce mois-ci</option><option>Je compare encore</option></select>',
+      '<textarea name="details" placeholder="Contexte rapide : niveau, poids, objectif, ce que tu as deja essaye"></textarea>',
+      '<div class="achzod-coaching-wa-error">Laisse au moins ton email ou ton tel pour qu on puisse te relancer proprement.</div>',
+      '<button type="submit" class="achzod-coaching-wa-submit">Envoyer sur WhatsApp</button>',
+      '</form>',
+      '</div>',
+      '<button type="button" class="achzod-coaching-wa-pulse" aria-label="Contacter Achzod sur WhatsApp"><span>☎</span><span><small>Coaching Achzod</small><strong>Parler a Achzod</strong></span></button>'
+    ].join('');
+    document.body.appendChild(hub);
+
+    var card = hub.querySelector('#achzod-coaching-wa-card');
+    var pulse = hub.querySelector('.achzod-coaching-wa-pulse');
+    var close = hub.querySelector('.achzod-coaching-wa-close');
+    var form = hub.querySelector('form');
+    var error = hub.querySelector('.achzod-coaching-wa-error');
+
+    function setOpen(open) {
+      card.classList.toggle('is-open', !!open);
+    }
+
+    pulse.addEventListener('click', function () {
+      trackCoachingLead({ eventType: 'click', placement: 'achzodcoaching_floating_button' });
+      setOpen(!card.classList.contains('is-open'));
+    });
+    close.addEventListener('click', function () { setOpen(false); });
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var data = {
+        email: String(form.email.value || '').trim(),
+        phone: String(form.phone.value || '').trim(),
+        goal: String(form.goal.value || '').trim(),
+        blocker: String(form.blocker.value || '').trim(),
+        urgency: String(form.urgency.value || '').trim(),
+        details: String(form.details.value || '').trim()
+      };
+      if (!data.email && !data.phone) {
+        error.style.display = 'block';
+        return;
+      }
+      error.style.display = 'none';
+      trackCoachingLead(Object.assign({
+        eventType: 'form',
+        placement: 'achzodcoaching_global_form',
+        contactEmail: data.email
+      }, data));
+      openCoachingWhatsApp(data);
+      setOpen(false);
+    });
+
+    try {
+      if (!sessionStorage.getItem('achzod_coaching_whatsapp_prompted_v1')) {
+        sessionStorage.setItem('achzod_coaching_whatsapp_prompted_v1', '1');
+        window.setTimeout(function () { setOpen(true); }, 12000);
+      }
+    } catch (_) {
+      window.setTimeout(function () { setOpen(true); }, 12000);
+    }
+  }
+
   // Neutralise aussi le PayPal natif Webflow sur les pages panier globales.
   removeLegacyButtons();
   var cleanupCount = 0;
@@ -346,6 +533,9 @@
     cleanupCount += 1;
     if (cleanupCount >= 10) window.clearInterval(cleanupTimer);
   }, 1000);
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectCoachingWhatsAppHub);
+  else injectCoachingWhatsAppHub();
 
   if (!/\/checkout\/?$/.test(window.location.pathname)) return;
 

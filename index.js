@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { once } = require('node:events');
 const { createHash, randomUUID, timingSafeEqual } = require('node:crypto');
+const fetch = require('node-fetch');
 const { MemoryFulfillmentStore, RedisFulfillmentStore } = require('./fulfillment-store');
 const { CheckoutValidationError, PRODUCTS, PROMOTIONS, buildLineItems, resolveProduct } = require('./checkout-security');
 const {
@@ -52,10 +53,10 @@ async function createDynamicDiscountCoupon(stripe, cart) {
 const app = express();
 app.set('trust proxy', 1);
 
-// Stripe UAE (paiements normaux : cartes, Apple Pay, etc.)
+// Stripe coaching@achzodcoaching.com (paiements normaux : CB, Link, Apple Pay, etc.)
 const stripeUAE = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Stripe FR (uniquement pour Klarna)
+// Stripe achzodyt@gmail.com (Klarna)
 const stripeFR = process.env.STRIPE_SECRET_KEY_FR ? new Stripe(process.env.STRIPE_SECRET_KEY_FR) : null;
 
 // Configuration email (Gmail)
@@ -864,6 +865,56 @@ async function sendCustomerOrderEmail(customerEmail, customerName, products, ebo
   }
 }
 
+async function notifyApexLabsCoachingBuyer(customerEmail, products, options = {}) {
+  const email = String(customerEmail || '').trim().toLowerCase();
+  if (!email || !products.some(isCoachingProduct)) return true;
+
+  const baseUrl = String(options.baseUrl || process.env.APEXLABS_BASE_URL || 'https://apexlabs.achzodcoaching.com').replace(/\/+$/, '');
+  const adminKey = options.adminKey || process.env.APEXLABS_ADMIN_KEY || '';
+  if (!adminKey) {
+    console.warn(JSON.stringify({
+      component: 'apexlabs_coaching_sync',
+      event: 'skipped_missing_admin_key',
+      email,
+    }));
+    return true;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/admin/contacts/mark-coaching-buyers`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-admin-key': adminKey,
+      },
+      body: JSON.stringify({
+        emails: [email],
+        source: options.source || 'achzodcoaching_checkout',
+      }),
+      timeout: options.timeoutMs || 10_000,
+    });
+
+    if (!response.ok) {
+      throw new Error(`APEXLABS coaching sync HTTP ${response.status}`);
+    }
+
+    console.info(JSON.stringify({
+      component: 'apexlabs_coaching_sync',
+      event: 'marked_coaching_buyer',
+      email,
+    }));
+    return true;
+  } catch (error) {
+    console.error(JSON.stringify({
+      component: 'apexlabs_coaching_sync',
+      event: 'failed',
+      email,
+      error: error.message,
+    }));
+    return false;
+  }
+}
+
 // Fonction pour envoyer une notification à Achzod pour chaque commande Klarna
 async function sendOrderNotification(customerEmail, customerName, products, totalAmount, paymentMethod, notificationId) {
   const safeCustomerEmail = escapeHtml(customerEmail);
@@ -1100,6 +1151,7 @@ async function fulfillPaidCheckout(stripe, sessionId, paymentMethod, options = {
   const identity = getFulfillmentIdentity(session);
   const sendAdmin = options.sendOrderNotification || sendOrderNotification;
   const sendCustomer = options.sendCustomerOrderEmail || sendCustomerOrderEmail;
+  const notifyApex = options.notifyApexLabsCoachingBuyer || notifyApexLabsCoachingBuyer;
   const now = options.now || (() => new Date());
   const customerEmail = session.customer_details?.email || session.customer_email;
   const customerName = session.customer_details?.name || '';
@@ -1140,10 +1192,23 @@ async function fulfillPaidCheckout(stripe, sessionId, paymentMethod, options = {
     failureMessage: 'Confirmation client non envoyée',
     now,
   });
+  const apexLabsCoachingSync = await deliverClaimedSideEffect({
+    store,
+    identity,
+    effect: 'apexlabs_coaching_exclusion',
+    send: () => notifyApex(customerEmail, productNames, {
+      source: paymentMethod === 'Klarna'
+        ? 'achzodcoaching_stripe_achzodyt_klarna'
+        : 'achzodcoaching_stripe_coaching_card',
+    }),
+    failureMessage: 'Sync exclusion coaching APEXLABS non effectuee',
+    now,
+  });
   return {
     delivered: Boolean(adminResult.delivered && customerResult.delivered),
     adminNotification: adminResult,
     customerEmail: customerResult,
+    apexLabsCoachingSync,
   };
 }
 
@@ -1203,6 +1268,7 @@ async function fulfillCapturedPayPalOrder(order, options = {}) {
   const store = options.store || getDefaultFulfillmentStore();
   const sendAdmin = options.sendOrderNotification || sendOrderNotification;
   const sendCustomer = options.sendCustomerOrderEmail || sendCustomerOrderEmail;
+  const notifyApex = options.notifyApexLabsCoachingBuyer || notifyApexLabsCoachingBuyer;
   const now = options.now || (() => new Date());
   const ebooks = summary.productNames
     .map((name) => findEbookLink(name, {
@@ -1240,11 +1306,22 @@ async function fulfillCapturedPayPalOrder(order, options = {}) {
     failureMessage: 'Confirmation client PayPal non envoyée',
     now,
   });
+  const apexLabsCoachingSync = await deliverClaimedSideEffect({
+    store,
+    identity: summary.identity,
+    effect: 'apexlabs_coaching_exclusion',
+    send: () => notifyApex(summary.customerEmail, summary.productNames, {
+      source: 'achzodcoaching_paypal',
+    }),
+    failureMessage: 'Sync exclusion coaching APEXLABS non effectuee',
+    now,
+  });
 
   return {
     delivered: Boolean(adminResult.delivered && customerResult.delivered),
     adminNotification: adminResult,
     customerEmail: customerResult,
+    apexLabsCoachingSync,
   };
 }
 
@@ -1793,5 +1870,6 @@ module.exports = {
   invoiceSubscriptionId,
   isAchzodLabInvoice,
   isCoachingProduct,
+  notifyApexLabsCoachingBuyer,
   normalizeProductLabel,
 };

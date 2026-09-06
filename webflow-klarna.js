@@ -454,6 +454,9 @@
 
     var hub = document.createElement('div');
     hub.id = 'achzod-coaching-whatsapp-hub';
+    if (/\/checkout\/?$/.test(window.location.pathname || '')) {
+      hub.style.bottom = '102px';
+    }
     hub.innerHTML = [
       '<div id="achzod-coaching-wa-card" role="dialog" aria-label="Orientation coaching WhatsApp">',
       '<div class="achzod-coaching-wa-head">',

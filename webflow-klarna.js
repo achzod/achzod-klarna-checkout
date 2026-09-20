@@ -550,10 +550,21 @@
     var checkoutOverlayGuard = document.createElement('style');
     checkoutOverlayGuard.id = 'achzod-checkout-overlay-guard';
     checkoutOverlayGuard.textContent = [
-      '#achzod-chat-footer{display:none!important;pointer-events:none!important}',
-      '#achzod-coaching-whatsapp-hub{display:none!important;pointer-events:none!important}'
+      'html body #achzod-chat-footer{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
+      'html body #achzod-coaching-whatsapp-hub{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}'
     ].join('');
     document.head.appendChild(checkoutOverlayGuard);
+
+    var removeCheckoutOverlays = function () {
+      ['achzod-chat-footer', 'achzod-coaching-whatsapp-hub'].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.remove();
+      });
+    };
+    removeCheckoutOverlays();
+    var overlayObserver = new MutationObserver(removeCheckoutOverlays);
+    overlayObserver.observe(document.documentElement, { childList: true, subtree: true });
+    window.setTimeout(function () { overlayObserver.disconnect(); }, 15_000);
   } else if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectCoachingWhatsAppHub);
   } else {

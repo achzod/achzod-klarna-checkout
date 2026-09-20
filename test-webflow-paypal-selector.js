@@ -12,8 +12,14 @@ assert.match(
 
 assert.match(
   source,
-  /#achzod-chat-footer\{display:none!important;pointer-events:none!important\}/,
+  /#achzod-chat-footer\{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important\}/,
   'Le widget WhatsApp historique ne doit jamais intercepter les boutons de paiement sur mobile',
+);
+
+assert.match(
+  source,
+  /new MutationObserver\(removeCheckoutOverlays\)/,
+  'Les widgets injectés tardivement doivent être retirés pendant l’initialisation du checkout',
 );
 
 assert.match(

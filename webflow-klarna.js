@@ -281,9 +281,12 @@
       });
       window.clearTimeout(timeout);
       var data = await response.json().catch(function () { return {}; });
-      return Boolean(response.ok && data.enabled);
+      if (response.ok) return data.enabled !== false;
+      // Une panne réseau/config transitoire ne doit pas faire disparaître
+      // silencieusement PayPal. Le clic conservera son message d’erreur dédié.
+      return true;
     } catch (_) {
-      return false;
+      return true;
     }
   }
 
@@ -598,7 +601,7 @@
     var wrap = document.createElement('div');
     wrap.id = BUTTON_ID;
     wrap.setAttribute('style', 'position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:12px 15px;background:#FFB3C7;box-shadow:0 -4px 18px rgba(0,0,0,.25)');
-    wrap.innerHTML = '<div style="width:100%;max-width:520px;margin:0 auto;display:grid;grid-template-columns:' + (paypalAvailable ? '1fr 1fr' : '1fr') + ';gap:10px"><button type="button" class="ac-klarna-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#0A0B09;color:#fff;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px">Klarna 3x</button>' + (paypalAvailable ? '<button type="button" class="ac-paypal-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#fff;color:#003087;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" style="height:20px">PayPal</button>' : '') + '</div><div role="alert" aria-live="polite" style="display:none;max-width:520px;margin:8px auto 0;color:#0A0B09;font-size:13px;font-weight:700;text-align:center"></div>';
+    wrap.innerHTML = '<div style="width:100%;max-width:520px;margin:0 auto;display:grid;grid-template-columns:' + (paypalAvailable ? '1fr 1fr' : '1fr') + ';gap:10px"><button type="button" class="ac-klarna-btn" aria-label="Payer avec Klarna en 3 fois" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#0A0B09;color:#fff;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px">Klarna 3x</button>' + (paypalAvailable ? '<button type="button" class="ac-paypal-btn" aria-label="Payer avec PayPal en 4 fois si éligible" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#fff;color:#003087;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" style="height:20px">PayPal 4x</button>' : '') + '</div><div role="alert" aria-live="polite" style="display:none;max-width:520px;margin:8px auto 0;color:#0A0B09;font-size:13px;font-weight:700;text-align:center"></div>';
     document.body.appendChild(wrap);
     document.body.style.paddingBottom = '90px';
 

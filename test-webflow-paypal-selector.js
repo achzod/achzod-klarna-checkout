@@ -28,4 +28,16 @@ assert.match(
   'La protection des overlays doit être liée explicitement à la page checkout',
 );
 
+assert.match(
+  source,
+  /catch \(_\) \{\s*return true;\s*\}/,
+  'Une panne de préflight ne doit pas faire disparaître silencieusement PayPal',
+);
+
+assert.match(
+  source,
+  /aria-label="Payer avec PayPal en 4 fois si éligible"/,
+  'Le bouton PayPal doit expliquer clairement le 4x et son éligibilité',
+);
+
 console.log('✅ Webflow PayPal email selector tests passed');

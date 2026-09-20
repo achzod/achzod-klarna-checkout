@@ -24,6 +24,18 @@ assert.match(
 
 assert.match(
   source,
+  /\.apexlabs-sticky\{display:none!important/,
+  'La bannière CTA flottante ne doit pas réduire la zone utile du checkout mobile',
+);
+
+assert.match(
+  source,
+  /@media\(max-width:420px\).*white-space:nowrap!important/,
+  'Les libellés PayPal et Klarna doivent rester sur une ligne sur les petits téléphones',
+);
+
+assert.match(
+  source,
   /if \(!isCheckoutPage\) return/,
   'La protection des overlays doit être liée explicitement à la page checkout',
 );

@@ -554,7 +554,9 @@
     checkoutOverlayGuard.id = 'achzod-checkout-overlay-guard';
     checkoutOverlayGuard.textContent = [
       'html body #achzod-chat-footer{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
-      'html body #achzod-coaching-whatsapp-hub{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}'
+      'html body #achzod-coaching-whatsapp-hub{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
+      'html body .apexlabs-sticky{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
+      '@media(max-width:420px){#achzod-klarna-checkout{padding:8px 10px!important}#achzod-klarna-checkout button{min-height:48px!important;padding:11px 7px!important;gap:6px!important;font-size:13px!important;white-space:nowrap!important}#achzod-klarna-checkout .ac-klarna-btn img{height:18px!important}#achzod-klarna-checkout .ac-paypal-btn img{height:18px!important}}'
     ].join('');
     document.head.appendChild(checkoutOverlayGuard);
 
@@ -562,6 +564,9 @@
       ['achzod-chat-footer', 'achzod-coaching-whatsapp-hub'].forEach(function (id) {
         var node = document.getElementById(id);
         if (node) node.remove();
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('.apexlabs-sticky'), function (node) {
+        node.remove();
       });
     };
     removeCheckoutOverlays();

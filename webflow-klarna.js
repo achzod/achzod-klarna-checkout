@@ -543,10 +543,24 @@
     if (cleanupCount >= 10) window.clearInterval(cleanupTimer);
   }, 1000);
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectCoachingWhatsAppHub);
-  else injectCoachingWhatsAppHub();
+  var isCheckoutPage = /\/checkout\/?$/.test(window.location.pathname);
+  if (isCheckoutPage) {
+    // Les widgets WhatsApp flottants passent au-dessus de la barre de paiement
+    // sur certains mobiles et interceptent le clic PayPal/Klarna.
+    var checkoutOverlayGuard = document.createElement('style');
+    checkoutOverlayGuard.id = 'achzod-checkout-overlay-guard';
+    checkoutOverlayGuard.textContent = [
+      '#achzod-chat-footer{display:none!important;pointer-events:none!important}',
+      '#achzod-coaching-whatsapp-hub{display:none!important;pointer-events:none!important}'
+    ].join('');
+    document.head.appendChild(checkoutOverlayGuard);
+  } else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectCoachingWhatsAppHub);
+  } else {
+    injectCoachingWhatsAppHub();
+  }
 
-  if (!/\/checkout\/?$/.test(window.location.pathname)) return;
+  if (!isCheckoutPage) return;
 
   // Recharge complète du checkout Webflow quand la page revient du cache
   // (bouton retour navigateur, retour depuis Stripe/Klarna). Force la lecture

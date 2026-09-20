@@ -173,7 +173,11 @@
     var items = await waitForDomItems();
     var totalNode = document.querySelector(CHECKOUT_TOTAL_SELECTOR);
     var totalAmount = parseEuro(totalNode ? totalNode.textContent : '');
-    var emailNode = document.querySelector('input[type="email"]');
+    // Webflow rend actuellement le champ email du checkout en `type="text"`.
+    // Garder les fallbacks standards pour ne pas casser une future migration.
+    var emailNode = document.querySelector(
+      '.w-commerce-commercecheckoutemailinput, input[name="email"], input[type="email"]'
+    );
     var payload = {
       items: items,
       customerEmail: emailNode ? emailNode.value : '',

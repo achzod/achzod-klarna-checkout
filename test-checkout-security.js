@@ -114,6 +114,19 @@ test('applique les trois codes ApexLabs aux coachings', () => {
   }
 });
 
+test('applique DISCOVERY30 au panier client Essential 12 x2 sans divergence de total', () => {
+  const cart = validateAndPriceCart({
+    discountCode: 'DISCOVERY30',
+    totalAmount: 768.60,
+    items: [{ name: 'Essential 12 semaines', quantity: 2 }],
+  });
+  assert.equal(cart.subtotalCents, 109800);
+  assert.equal(cart.discountCents, 32940);
+  assert.equal(cart.totalCents, 76860);
+  assert.equal(cart.promotionCode, 'DISCOVERY30');
+  rejects({ discountCode: 'DISCOVERY30', items: [{ name: 'Anabolic Code' }] }, /ne s’applique pas/);
+});
+
 test('récupère quantité 2 et BLOOD99 depuis l’ancien bouton Webflow', () => {
   const cart = validateAndPriceCart({
     totalAmount: 999,

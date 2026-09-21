@@ -102,6 +102,7 @@ const DEFAULT_PROMOTION_RULES = Object.freeze({
   BIOSCAN59: Object.freeze({ code: 'BIOSCAN59', amountOff: 5900 }),
   ULTIMATE79: Object.freeze({ code: 'ULTIMATE79', amountOff: 7900 }),
   BLOOD99: Object.freeze({ code: 'BLOOD99', amountOff: 9900 }),
+  DISCOVERY30: Object.freeze({ code: 'DISCOVERY30', percentOff: 30, appliesTo: 'coaching' }),
   FAQ50: Object.freeze({ code: 'FAQ50', percentOff: 50, appliesTo: 'ebooks' }),
   ZOD20: Object.freeze({ code: 'ZOD20', percentOff: 20 }),
 });

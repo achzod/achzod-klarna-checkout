@@ -202,13 +202,16 @@
     window.dataLayer.push(Object.assign({ event: eventName }, details || {}));
   }
 
-  function removeLegacyButtons() {
+  function removeLegacyButtons(root) {
+    root = root || document;
     LEGACY_IDS.forEach(function (id) {
-      var node = document.getElementById(id);
+      var node = root.nodeType === Node.ELEMENT_NODE && root.id === id
+        ? root
+        : root.querySelector && root.querySelector('#' + id);
       if (node) node.remove();
     });
     LEGACY_PAYPAL_SELECTORS.forEach(function (selector) {
-      Array.prototype.forEach.call(document.querySelectorAll(selector), function (node) {
+      nodesMatching(root, selector).forEach(function (node) {
         if (node && node.id !== BUTTON_ID && !node.closest('#' + BUTTON_ID)) node.remove();
       });
     });
@@ -471,20 +474,20 @@
       '<div class="achzod-coaching-wa-head">',
       '<div><p class="achzod-coaching-wa-kicker">Orientation gratuite</p>',
       '<p class="achzod-coaching-wa-title">Tu veux le coaching ? Envoie ton cas.</p>',
-      '<p class="achzod-coaching-wa-sub">Laisse ton contact + ton blocage. Le message WhatsApp part deja structure pour te router vite.</p></div>',
+      '<p class="achzod-coaching-wa-sub">Laisse ton contact et ton blocage. Le message WhatsApp part déjà structuré pour t’orienter rapidement.</p></div>',
       '<button type="button" class="achzod-coaching-wa-close" aria-label="Fermer">x</button>',
       '</div>',
       '<form class="achzod-coaching-wa-form">',
       '<div class="achzod-coaching-wa-row"><input name="email" type="email" placeholder="Email"><input name="phone" type="tel" placeholder="WhatsApp / tel"></div>',
       '<input name="goal" required placeholder="Objectif principal">',
-      '<select name="blocker" required><option value="">Blocage principal</option><option>Perte de gras bloquee</option><option>Prise de muscle / recomp</option><option>Manque de cadre et suivi</option><option>Energie / sommeil / hormones</option><option>Je ne sais pas quoi choisir</option></select>',
+      '<select name="blocker" required><option value="">Blocage principal</option><option>Perte de gras bloquée</option><option>Prise de muscle / recomposition</option><option>Manque de cadre et suivi</option><option>Énergie / sommeil / hormones</option><option>Je ne sais pas quoi choisir</option></select>',
       '<select name="urgency" required><option value="">Timing</option><option>Maintenant</option><option>Cette semaine</option><option>Ce mois-ci</option><option>Je compare encore</option></select>',
-      '<textarea name="details" placeholder="Contexte rapide : niveau, poids, objectif, ce que tu as deja essaye"></textarea>',
-      '<div class="achzod-coaching-wa-error">Laisse au moins ton email ou ton tel pour qu on puisse te relancer proprement.</div>',
+      '<textarea name="details" placeholder="Contexte rapide : niveau, poids, objectif, ce que tu as déjà essayé"></textarea>',
+      '<div class="achzod-coaching-wa-error">Laisse au moins ton e-mail ou ton téléphone pour qu’on puisse te recontacter proprement.</div>',
       '<button type="submit" class="achzod-coaching-wa-submit">Envoyer sur WhatsApp</button>',
       '</form>',
       '</div>',
-      '<button type="button" class="achzod-coaching-wa-pulse" aria-label="Contacter Achzod sur WhatsApp"><span>☎</span><span><small>Coaching Achzod</small><strong>Parler a Achzod</strong></span></button>'
+      '<button type="button" class="achzod-coaching-wa-pulse" aria-label="Contacter Achzod sur WhatsApp"><span>☎</span><span><small>Coaching Achzod</small><strong>Parler à Achzod</strong></span></button>'
     ].join('');
     document.body.appendChild(hub);
 
@@ -538,10 +541,14 @@
   }
 
   function replaceVisibleText(root, replacements) {
-    if (!root || !document.createTreeWalker) return;
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    if (!root) return;
     var textNodes = [];
-    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    if (root.nodeType === Node.TEXT_NODE) {
+      textNodes.push(root);
+    } else if (document.createTreeWalker) {
+      var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+    }
     textNodes.forEach(function (node) {
       var parentTag = node.parentElement && node.parentElement.tagName;
       if (!parentTag || /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/i.test(parentTag)) return;
@@ -553,7 +560,14 @@
     });
   }
 
-  function localizeCountrySelectors() {
+  function nodesMatching(root, selector) {
+    if (!root || root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_NODE) return [];
+    var nodes = [];
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches(selector)) nodes.push(root);
+    return nodes.concat(Array.prototype.slice.call(root.querySelectorAll(selector)));
+  }
+
+  function localizeCountrySelectors(root) {
     if (!window.Intl || typeof window.Intl.DisplayNames !== 'function') return;
     var names;
     try {
@@ -561,87 +575,29 @@
     } catch (_) {
       return;
     }
-    Array.prototype.forEach.call(
-      document.querySelectorAll('select[name*="country" i], select[class*="country" i], select[data-node-type*="country" i]'),
-      function (select) {
-        Array.prototype.forEach.call(select.options || [], function (option) {
-          var regionCode = String(
-            option.value || option.getAttribute('data-country-code') || option.getAttribute('data-code') || ''
-          ).trim().toUpperCase();
-          if (/^[A-Z]{2}$/.test(regionCode)) {
-            try {
-              var translated = names.of(regionCode);
-              if (translated && option.textContent !== translated) option.textContent = translated;
-            } catch (_) {}
-          }
-        });
-      }
-    );
-  }
-
-  function replacePlaceholderCopy() {
-    var featureCopy = [
-      'Un plan construit selon ton niveau, tes contraintes, ton matériel et ta capacité de récupération, puis ajusté à mesure que tu progresses.',
-      'Une stratégie nutritionnelle personnalisée avec des quantités, des options concrètes et des ajustements fondés sur tes bilans.',
-      'Un repas plaisir cadré lorsque le contexte le permet, sans casser la progression ni transformer la semaine en restriction.',
-      'Chaque semaine, ton poids, tes photos, tes performances, ton sommeil, ton stress et ta digestion guident les ajustements.',
-      'Le volume, les exercices et la progression sont adaptés à tes douleurs, tes blessures et ton niveau de reprise.',
-      'Tu reçois des réponses claires par e-mail et des consignes directement applicables dans le délai prévu par ta formule.'
-    ];
-    var index = 0;
-    Array.prototype.forEach.call(document.querySelectorAll('p'), function (paragraph) {
-      if (!/^\s*Lorem ipsum\b/i.test(paragraph.textContent || '')) return;
-      paragraph.textContent = featureCopy[index] || featureCopy[featureCopy.length - 1];
-      index += 1;
-    });
-  }
-
-  function replaceUnverifiedTestimonials() {
-    if (window.location.pathname !== '/' && window.location.pathname !== '') return;
-    var wrap = document.querySelector('.testimonial-wrap');
-    if (!wrap || wrap.dataset.achzodVerifiedReplacement === '1') return;
-    wrap.dataset.achzodVerifiedReplacement = '1';
-    wrap.innerHTML = '<div style="max-width:760px;margin:0 auto;text-align:center;padding:38px 20px"><div class="space-text">résultats documentés</div><h2 style="margin:14px 0">Des transformations, pas des promesses</h2><p style="margin:0 auto 22px;max-width:620px">Découvre les transformations avant/après déjà publiées et choisis ensuite le niveau d’accompagnement adapté à ton objectif.</p><a class="button-rectangle color" href="/transformations">Voir les transformations</a></div>';
-  }
-
-  function improveTransformationAccessibility() {
-    Array.prototype.forEach.call(
-      document.querySelectorAll('.transformation-img, .transformation-image'),
-      function (image, index) {
-        if (!image.getAttribute('alt')) {
-          image.setAttribute('alt', 'Transformation client Achzod Coaching — avant et après ' + (index + 1));
+    nodesMatching(
+      root,
+      'select[name*="country" i], select[class*="country" i], select[data-node-type*="country" i]'
+    ).forEach(function (select) {
+      Array.prototype.forEach.call(select.options || [], function (option) {
+        var regionCode = String(
+          option.value || option.getAttribute('data-country-code') || option.getAttribute('data-code') || ''
+        ).trim().toUpperCase();
+        if (/^[A-Z]{2}$/.test(regionCode)) {
+          try {
+            var translated = names.of(regionCode);
+            if (translated && option.textContent !== translated) option.textContent = translated;
+          } catch (_) {}
         }
-      }
-    );
-  }
-
-  function normalizeFormulaLinks() {
-    Array.prototype.forEach.call(document.querySelectorAll('a'), function (link) {
-      var label = String(link.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!/trouv(?:er|e)\s+(?:ma|ta)\s+formule/i.test(label)) return;
-      link.href = 'https://achzod-chat-orientation.onrender.com/';
-      replaceVisibleText(link, [[/trouv(?:er|e)\s+(?:ma|ta)\s+formule/ig, 'Trouver ma formule']]);
+      });
     });
   }
 
-  function updateCertificationMetadata() {
-    Array.prototype.forEach.call(
-      document.querySelectorAll('meta[name="description"], meta[property="og:description"], meta[name="twitter:description"]'),
-      function (meta) {
-        meta.content = String(meta.content || '')
-          .replace(/12 certifications internationales/gi, '11 certifications internationales')
-          .replace(/certifié 12x international/gi, 'certifié par 11 formations internationales');
-      }
-    );
-  }
-
-  var COMMERCE_TRANSLATIONS = [
-    [/\$\s*0[.,]00/g, '0,00 €'],
+  // Ces libellés relèvent du parcours de paiement servi par ce dépôt. Les
+  // contenus éditoriaux, metas, avis, prix et placeholders du site restent la
+  // responsabilité de Webflow et ne sont volontairement plus réécrits ici.
+  var CHECKOUT_TRANSLATIONS = [
     [/Pay with browser\.?/gi, 'Payer avec ce navigateur'],
-    [/Keep Shopping/gi, 'Continuer mes achats'],
-    [/\b(\d+)\s+Reviews\b/gi, '$1 avis'],
-    [/\bNewest First\b/gi, 'Plus récents'],
-    [/Product is not available in this quantity\.?/gi, 'Ce produit n’est pas disponible dans cette quantité.'],
     [/Shipping Address/gi, 'Adresse de livraison'],
     [/Billing address same as shipping/gi, 'L’adresse de facturation est identique à l’adresse de livraison'],
     [/No shipping methods are available for the address given\.?/gi, 'Aucun mode de livraison n’est disponible pour cette adresse.'],
@@ -650,72 +606,28 @@
     [/State\/Province/gi, 'État / Province'],
     [/Zip\/Postal Code/gi, 'Code postal'],
     [/\bCountry\b/g, 'Pays'],
-    [/\bRequired\b/g, 'Champ obligatoire']
+    [/\bRequired\b/g, 'Champ obligatoire'],
+    [/Apply Discount/gi, 'Appliquer la remise'],
+    [/THIS DISCOUNT IS INVALID\.?/gi, 'Ce code promotionnel est invalide.']
   ];
 
-  function applyCommerceLocalizations() {
-    replaceVisibleText(document.body, COMMERCE_TRANSLATIONS);
-    localizeCountrySelectors();
-  }
-
-  function applyWebflowContentCorrections() {
-    document.documentElement.lang = 'fr';
-    applyCommerceLocalizations();
-    replaceVisibleText(document.body, [
-      [/Je ne suis pas à la recherche de chiffre, je suis à la rechercher de résultats\./gi, 'Je ne suis pas à la recherche de chiffres, je suis à la recherche de résultats.'],
-      [/Je ferai parti/gi, 'Je ferai partie'],
-      [/instantann(?:é|ée|és|ées)?/gi, 'instantané'],
-      [/30min de Call/gi, '30 min d’appel vidéo'],
-      [/Accès Whatsapp/gi, 'Accès WhatsApp'],
-      [/Messages Whatsapp/gi, 'Messages WhatsApp'],
-      [/via Whatsapp/gi, 'via WhatsApp'],
-      [/temps réel\.Chaque/gi, 'temps réel. Chaque'],
-      [/mouvements en videos/gi, 'mouvements en vidéo'],
-      [/sportif ou autre set réathletisation progressive/gi, 'sportif et réathlétisation progressive'],
-      [/©\s*2025\s*AchzodCoaching/gi, '© ' + new Date().getFullYear() + ' AchzodCoaching'],
-      [/12 certifications internationales/gi, '11 certifications internationales'],
-      [/PLACES TRÈS LIMITÉES/gi, 'INSCRIPTIONS OUVERTES'],
-      [/NOUVELLES PLACES DISPONIBLES/gi, 'INSCRIPTIONS OUVERTES'],
-      [/vous rendront complètement indépendant(?:e)?/gi, 'vous rendront totalement autonome']
-    ]);
-    replacePlaceholderCopy();
-    normalizeFormulaLinks();
-    replaceUnverifiedTestimonials();
-    improveTransformationAccessibility();
-    updateCertificationMetadata();
-  }
-
-  applyWebflowContentCorrections();
-  var contentCorrectionObserver = new MutationObserver(function () {
-    applyWebflowContentCorrections();
-  });
-  contentCorrectionObserver.observe(document.documentElement, { childList: true, subtree: true });
-  window.setTimeout(function () { contentCorrectionObserver.disconnect(); }, 15_000);
-
-  // Le panier et certains avis sont injectés à l’ouverture, parfois bien après
-  // les 15 premières secondes. Cette observation persistante ne touche qu’aux
-  // libellés commerce et garantit notamment que le panier vide reste en EUR.
-  var commerceLocalizationPending = false;
-  var commerceLocalizationObserver = new MutationObserver(function () {
-    if (commerceLocalizationPending) return;
-    commerceLocalizationPending = true;
-    window.requestAnimationFrame(function () {
-      commerceLocalizationPending = false;
-      applyCommerceLocalizations();
+  function applyCheckoutLocalizations(root) {
+    replaceVisibleText(root, CHECKOUT_TRANSLATIONS);
+    localizeCountrySelectors(root);
+    nodesMatching(root, 'input[type="submit"], input[type="button"], button').forEach(function (control) {
+      if (control.tagName === 'INPUT') {
+        var value = String(control.value || '');
+        CHECKOUT_TRANSLATIONS.forEach(function (entry) { value = value.replace(entry[0], entry[1]); });
+        if (value !== control.value) control.value = value;
+      }
+      var label = String(control.getAttribute('aria-label') || '');
+      CHECKOUT_TRANSLATIONS.forEach(function (entry) { label = label.replace(entry[0], entry[1]); });
+      if (label) control.setAttribute('aria-label', label);
     });
-  });
-  commerceLocalizationObserver.observe(document.documentElement, { childList: true, subtree: true });
-
-  // Neutralise aussi le PayPal natif Webflow sur les pages panier globales.
-  removeLegacyButtons();
-  var cleanupCount = 0;
-  var cleanupTimer = window.setInterval(function () {
-    removeLegacyButtons();
-    cleanupCount += 1;
-    if (cleanupCount >= 10) window.clearInterval(cleanupTimer);
-  }, 1000);
+  }
 
   var isCheckoutPage = /\/checkout\/?$/.test(window.location.pathname);
+
   if (isCheckoutPage) {
     // Les widgets WhatsApp flottants passent au-dessus de la barre de paiement
     // sur certains mobiles et interceptent le clic PayPal/Klarna.
@@ -730,19 +642,6 @@
     ].join('');
     document.head.appendChild(checkoutOverlayGuard);
 
-    var removeCheckoutOverlays = function () {
-      ['achzod-chat-footer', 'achzod-coaching-whatsapp-hub'].forEach(function (id) {
-        var node = document.getElementById(id);
-        if (node) node.remove();
-      });
-      Array.prototype.forEach.call(document.querySelectorAll('.apexlabs-sticky'), function (node) {
-        node.remove();
-      });
-    };
-    removeCheckoutOverlays();
-    var overlayObserver = new MutationObserver(removeCheckoutOverlays);
-    overlayObserver.observe(document.documentElement, { childList: true, subtree: true });
-    window.setTimeout(function () { overlayObserver.disconnect(); }, 15_000);
   } else if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectCoachingWhatsAppHub);
   } else {
@@ -750,6 +649,9 @@
   }
 
   if (!isCheckoutPage) return;
+
+  // Webflow inclut encore ce fichier globalement, mais aucun préflight PayPal,
+  // appel Klarna ni observer de paiement n'est démarré hors du checkout.
 
   // Recharge complète du checkout Webflow quand la page revient du cache
   // (bouton retour navigateur, retour depuis Stripe/Klarna). Force la lecture
@@ -767,7 +669,17 @@
 
   async function mount() {
     purgeLegacyBackups();
+    applyCheckoutLocalizations(document.body);
     removeLegacyButtons();
+    var checkoutObserver = new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        Array.prototype.forEach.call(mutation.addedNodes || [], function (node) {
+          applyCheckoutLocalizations(node);
+          removeLegacyButtons(node);
+        });
+      });
+    });
+    checkoutObserver.observe(document.body, { childList: true, subtree: true });
     setupBFCacheReload();
     if (document.getElementById(BUTTON_ID)) return;
     trackPromotionForm();

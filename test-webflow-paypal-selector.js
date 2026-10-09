@@ -52,4 +52,40 @@ assert.match(
   'Le bouton PayPal doit expliquer clairement le 4x et son éligibilité',
 );
 
-console.log('✅ Webflow PayPal email selector tests passed');
+assert.match(
+  source,
+  /Pay with browser\\\.\?\/gi, 'Payer avec ce navigateur'/,
+  'Le paiement natif Webflow doit être traduit en français',
+);
+
+assert.match(
+  source,
+  /new window\.Intl\.DisplayNames\(\['fr'\], \{ type: 'region' \}\)/,
+  'Les pays du checkout doivent utiliser leurs noms français',
+);
+
+assert.match(
+  source,
+  /replacePlaceholderCopy\(\)/,
+  'Les textes Lorem ipsum des offres doivent être remplacés',
+);
+
+assert.match(
+  source,
+  /©\\s\*2025\\s\*AchzodCoaching\/gi, '© ' \+ new Date\(\)\.getFullYear\(\) \+ ' AchzodCoaching'/,
+  'Le copyright Webflow doit rester aligné sur l’année courante',
+);
+
+assert.match(
+  source,
+  /12 certifications internationales\/gi, '11 certifications internationales'/,
+  'Le nombre de certifications doit être cohérent dans le site',
+);
+
+assert.match(
+  source,
+  /contentCorrectionObserver\.observe\(document\.documentElement, \{ childList: true, subtree: true \}\)/,
+  'Les corrections doivent aussi couvrir le panier injecté après le chargement',
+);
+
+console.log('✅ Webflow checkout and content correction tests passed');

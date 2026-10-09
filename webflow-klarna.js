@@ -537,6 +537,148 @@
     }
   }
 
+  function replaceVisibleText(root, replacements) {
+    if (!root || !document.createTreeWalker) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    var textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(function (node) {
+      var parentTag = node.parentElement && node.parentElement.tagName;
+      if (!parentTag || /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/i.test(parentTag)) return;
+      var value = node.nodeValue;
+      replacements.forEach(function (entry) {
+        value = value.replace(entry[0], entry[1]);
+      });
+      if (value !== node.nodeValue) node.nodeValue = value;
+    });
+  }
+
+  function localizeCountrySelectors() {
+    if (!window.Intl || typeof window.Intl.DisplayNames !== 'function') return;
+    var names;
+    try {
+      names = new window.Intl.DisplayNames(['fr'], { type: 'region' });
+    } catch (_) {
+      return;
+    }
+    Array.prototype.forEach.call(
+      document.querySelectorAll('select[name*="country" i], select[class*="country" i]'),
+      function (select) {
+        Array.prototype.forEach.call(select.options || [], function (option) {
+          if (/^[A-Z]{2}$/.test(option.value || '')) {
+            try {
+              var translated = names.of(option.value);
+              if (translated && option.textContent !== translated) option.textContent = translated;
+            } catch (_) {}
+          }
+        });
+      }
+    );
+  }
+
+  function replacePlaceholderCopy() {
+    var featureCopy = [
+      'Un plan construit selon ton niveau, tes contraintes, ton matériel et ta capacité de récupération, puis ajusté à mesure que tu progresses.',
+      'Une stratégie nutritionnelle personnalisée avec des quantités, des options concrètes et des ajustements fondés sur tes bilans.',
+      'Un repas plaisir cadré lorsque le contexte le permet, sans casser la progression ni transformer la semaine en restriction.',
+      'Chaque semaine, ton poids, tes photos, tes performances, ton sommeil, ton stress et ta digestion guident les ajustements.',
+      'Le volume, les exercices et la progression sont adaptés à tes douleurs, tes blessures et ton niveau de reprise.',
+      'Tu reçois des réponses claires par e-mail et des consignes directement applicables dans le délai prévu par ta formule.'
+    ];
+    var index = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('p'), function (paragraph) {
+      if (!/^\s*Lorem ipsum\b/i.test(paragraph.textContent || '')) return;
+      paragraph.textContent = featureCopy[index] || featureCopy[featureCopy.length - 1];
+      index += 1;
+    });
+  }
+
+  function replaceUnverifiedTestimonials() {
+    if (window.location.pathname !== '/' && window.location.pathname !== '') return;
+    var wrap = document.querySelector('.testimonial-wrap');
+    if (!wrap || wrap.dataset.achzodVerifiedReplacement === '1') return;
+    wrap.dataset.achzodVerifiedReplacement = '1';
+    wrap.innerHTML = '<div style="max-width:760px;margin:0 auto;text-align:center;padding:38px 20px"><div class="space-text">résultats documentés</div><h2 style="margin:14px 0">Des transformations, pas des promesses</h2><p style="margin:0 auto 22px;max-width:620px">Découvre les transformations avant/après déjà publiées et choisis ensuite le niveau d’accompagnement adapté à ton objectif.</p><a class="button-rectangle color" href="/transformations">Voir les transformations</a></div>';
+  }
+
+  function improveTransformationAccessibility() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.transformation-img, .transformation-image'),
+      function (image, index) {
+        if (!image.getAttribute('alt')) {
+          image.setAttribute('alt', 'Transformation client Achzod Coaching — avant et après ' + (index + 1));
+        }
+      }
+    );
+  }
+
+  function normalizeFormulaLinks() {
+    Array.prototype.forEach.call(document.querySelectorAll('a'), function (link) {
+      var label = String(link.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!/trouv(?:er|e)\s+(?:ma|ta)\s+formule/i.test(label)) return;
+      link.href = 'https://achzod-chat-orientation.onrender.com/';
+      replaceVisibleText(link, [[/trouv(?:er|e)\s+(?:ma|ta)\s+formule/ig, 'Trouver ma formule']]);
+    });
+  }
+
+  function updateCertificationMetadata() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('meta[name="description"], meta[property="og:description"], meta[name="twitter:description"]'),
+      function (meta) {
+        meta.content = String(meta.content || '')
+          .replace(/12 certifications internationales/gi, '11 certifications internationales')
+          .replace(/certifié 12x international/gi, 'certifié par 11 formations internationales');
+      }
+    );
+  }
+
+  function applyWebflowContentCorrections() {
+    document.documentElement.lang = 'fr';
+    replaceVisibleText(document.body, [
+      [/\$0\.00/g, '0,00 €'],
+      [/Pay with browser\.?/gi, 'Payer avec ce navigateur'],
+      [/Keep Shopping/gi, 'Continuer mes achats'],
+      [/Product is not available in this quantity\.?/gi, 'Ce produit n’est pas disponible dans cette quantité.'],
+      [/Shipping Address/gi, 'Adresse de livraison'],
+      [/Billing address same as shipping/gi, 'L’adresse de facturation est identique à l’adresse de livraison'],
+      [/No shipping methods are available for the address given\.?/gi, 'Aucun mode de livraison n’est disponible pour cette adresse.'],
+      [/Full Name/gi, 'Nom complet'],
+      [/Street Address/gi, 'Adresse'],
+      [/State\/Province/gi, 'État / Province'],
+      [/Zip\/Postal Code/gi, 'Code postal'],
+      [/\bCountry\b/g, 'Pays'],
+      [/\bRequired\b/g, 'Champ obligatoire'],
+      [/Je ne suis pas à la recherche de chiffre, je suis à la rechercher de résultats\./gi, 'Je ne suis pas à la recherche de chiffres, je suis à la recherche de résultats.'],
+      [/Je ferai parti/gi, 'Je ferai partie'],
+      [/instantann(?:é|ée|és|ées)?/gi, 'instantané'],
+      [/30min de Call/gi, '30 min d’appel vidéo'],
+      [/Accès Whatsapp/gi, 'Accès WhatsApp'],
+      [/Messages Whatsapp/gi, 'Messages WhatsApp'],
+      [/via Whatsapp/gi, 'via WhatsApp'],
+      [/temps réel\.Chaque/gi, 'temps réel. Chaque'],
+      [/mouvements en videos/gi, 'mouvements en vidéo'],
+      [/sportif ou autre set réathletisation progressive/gi, 'sportif et réathlétisation progressive'],
+      [/©\s*2025\s*AchzodCoaching/gi, '© ' + new Date().getFullYear() + ' AchzodCoaching'],
+      [/12 certifications internationales/gi, '11 certifications internationales'],
+      [/PLACES TRÈS LIMITÉES/gi, 'INSCRIPTIONS OUVERTES'],
+      [/NOUVELLES PLACES DISPONIBLES/gi, 'INSCRIPTIONS OUVERTES'],
+      [/vous rendront complètement indépendant(?:e)?/gi, 'vous rendront totalement autonome']
+    ]);
+    replacePlaceholderCopy();
+    localizeCountrySelectors();
+    normalizeFormulaLinks();
+    replaceUnverifiedTestimonials();
+    improveTransformationAccessibility();
+    updateCertificationMetadata();
+  }
+
+  applyWebflowContentCorrections();
+  var contentCorrectionObserver = new MutationObserver(function () {
+    applyWebflowContentCorrections();
+  });
+  contentCorrectionObserver.observe(document.documentElement, { childList: true, subtree: true });
+  window.setTimeout(function () { contentCorrectionObserver.disconnect(); }, 15_000);
+
   // Neutralise aussi le PayPal natif Webflow sur les pages panier globales.
   removeLegacyButtons();
   var cleanupCount = 0;

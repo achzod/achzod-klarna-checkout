@@ -40,6 +40,9 @@ const payload = buildPayPalOrderPayload({
 });
 
 assert.equal(payload.intent, 'CAPTURE');
+assert.equal(payload.application_context.locale, 'fr-FR');
+assert.equal(payload.purchase_units[0].amount.currency_code, 'EUR');
+assert.ok(payload.purchase_units[0].items.every((item) => item.unit_amount.currency_code === 'EUR'));
 assert.equal(payload.purchase_units[0].amount.value, '497.00');
 assert.equal(payload.purchase_units[0].amount.breakdown.item_total.value, '517.00');
 assert.equal(payload.purchase_units[0].amount.breakdown.discount.value, '20.00');

@@ -147,7 +147,7 @@
 
   function readAppliedPromotionCode() {
     var text = String(document.body ? document.body.innerText : '');
-    var match = text.match(/discount\s*\(\s*([a-z0-9_-]{1,64})\s*\)/i);
+    var match = text.match(/(?:discount|remise|r[ée]duction)\s*\(\s*([a-z0-9_-]{1,64})\s*\)/i);
     return normalizePromotionCode(match ? match[1] : '');
   }
 
@@ -562,12 +562,15 @@
       return;
     }
     Array.prototype.forEach.call(
-      document.querySelectorAll('select[name*="country" i], select[class*="country" i]'),
+      document.querySelectorAll('select[name*="country" i], select[class*="country" i], select[data-node-type*="country" i]'),
       function (select) {
         Array.prototype.forEach.call(select.options || [], function (option) {
-          if (/^[A-Z]{2}$/.test(option.value || '')) {
+          var regionCode = String(
+            option.value || option.getAttribute('data-country-code') || option.getAttribute('data-code') || ''
+          ).trim().toUpperCase();
+          if (/^[A-Z]{2}$/.test(regionCode)) {
             try {
-              var translated = names.of(option.value);
+              var translated = names.of(regionCode);
               if (translated && option.textContent !== translated) option.textContent = translated;
             } catch (_) {}
           }
@@ -632,22 +635,33 @@
     );
   }
 
+  var COMMERCE_TRANSLATIONS = [
+    [/\$\s*0[.,]00/g, '0,00 €'],
+    [/Pay with browser\.?/gi, 'Payer avec ce navigateur'],
+    [/Keep Shopping/gi, 'Continuer mes achats'],
+    [/\b(\d+)\s+Reviews\b/gi, '$1 avis'],
+    [/\bNewest First\b/gi, 'Plus récents'],
+    [/Product is not available in this quantity\.?/gi, 'Ce produit n’est pas disponible dans cette quantité.'],
+    [/Shipping Address/gi, 'Adresse de livraison'],
+    [/Billing address same as shipping/gi, 'L’adresse de facturation est identique à l’adresse de livraison'],
+    [/No shipping methods are available for the address given\.?/gi, 'Aucun mode de livraison n’est disponible pour cette adresse.'],
+    [/Full Name/gi, 'Nom complet'],
+    [/Street Address/gi, 'Adresse'],
+    [/State\/Province/gi, 'État / Province'],
+    [/Zip\/Postal Code/gi, 'Code postal'],
+    [/\bCountry\b/g, 'Pays'],
+    [/\bRequired\b/g, 'Champ obligatoire']
+  ];
+
+  function applyCommerceLocalizations() {
+    replaceVisibleText(document.body, COMMERCE_TRANSLATIONS);
+    localizeCountrySelectors();
+  }
+
   function applyWebflowContentCorrections() {
     document.documentElement.lang = 'fr';
+    applyCommerceLocalizations();
     replaceVisibleText(document.body, [
-      [/\$0\.00/g, '0,00 €'],
-      [/Pay with browser\.?/gi, 'Payer avec ce navigateur'],
-      [/Keep Shopping/gi, 'Continuer mes achats'],
-      [/Product is not available in this quantity\.?/gi, 'Ce produit n’est pas disponible dans cette quantité.'],
-      [/Shipping Address/gi, 'Adresse de livraison'],
-      [/Billing address same as shipping/gi, 'L’adresse de facturation est identique à l’adresse de livraison'],
-      [/No shipping methods are available for the address given\.?/gi, 'Aucun mode de livraison n’est disponible pour cette adresse.'],
-      [/Full Name/gi, 'Nom complet'],
-      [/Street Address/gi, 'Adresse'],
-      [/State\/Province/gi, 'État / Province'],
-      [/Zip\/Postal Code/gi, 'Code postal'],
-      [/\bCountry\b/g, 'Pays'],
-      [/\bRequired\b/g, 'Champ obligatoire'],
       [/Je ne suis pas à la recherche de chiffre, je suis à la rechercher de résultats\./gi, 'Je ne suis pas à la recherche de chiffres, je suis à la recherche de résultats.'],
       [/Je ferai parti/gi, 'Je ferai partie'],
       [/instantann(?:é|ée|és|ées)?/gi, 'instantané'],
@@ -665,7 +679,6 @@
       [/vous rendront complètement indépendant(?:e)?/gi, 'vous rendront totalement autonome']
     ]);
     replacePlaceholderCopy();
-    localizeCountrySelectors();
     normalizeFormulaLinks();
     replaceUnverifiedTestimonials();
     improveTransformationAccessibility();
@@ -678,6 +691,20 @@
   });
   contentCorrectionObserver.observe(document.documentElement, { childList: true, subtree: true });
   window.setTimeout(function () { contentCorrectionObserver.disconnect(); }, 15_000);
+
+  // Le panier et certains avis sont injectés à l’ouverture, parfois bien après
+  // les 15 premières secondes. Cette observation persistante ne touche qu’aux
+  // libellés commerce et garantit notamment que le panier vide reste en EUR.
+  var commerceLocalizationPending = false;
+  var commerceLocalizationObserver = new MutationObserver(function () {
+    if (commerceLocalizationPending) return;
+    commerceLocalizationPending = true;
+    window.requestAnimationFrame(function () {
+      commerceLocalizationPending = false;
+      applyCommerceLocalizations();
+    });
+  });
+  commerceLocalizationObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   // Neutralise aussi le PayPal natif Webflow sur les pages panier globales.
   removeLegacyButtons();
@@ -698,7 +725,8 @@
       'html body #achzod-chat-footer{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
       'html body #achzod-coaching-whatsapp-hub{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
       'html body .apexlabs-sticky{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}',
-      '@media(max-width:420px){#achzod-klarna-checkout{padding:8px 10px!important}#achzod-klarna-checkout button{min-height:48px!important;padding:11px 7px!important;gap:6px!important;font-size:13px!important;white-space:nowrap!important}#achzod-klarna-checkout .ac-klarna-btn img{height:18px!important}#achzod-klarna-checkout .ac-paypal-btn img{height:18px!important}}'
+      '@media(max-width:420px){#achzod-klarna-checkout{padding:8px 10px calc(8px + env(safe-area-inset-bottom))!important}#achzod-klarna-checkout button{min-height:48px!important;padding:11px 7px!important;gap:6px!important;font-size:13px!important;white-space:nowrap!important}#achzod-klarna-checkout .ac-klarna-btn img{height:18px!important}#achzod-klarna-checkout .ac-paypal-btn img{height:18px!important}}',
+      '@media(max-width:360px){#achzod-klarna-checkout .ac-payment-grid{grid-template-columns:1fr!important}}'
     ].join('');
     document.head.appendChild(checkoutOverlayGuard);
 
@@ -748,9 +776,18 @@
     var wrap = document.createElement('div');
     wrap.id = BUTTON_ID;
     wrap.setAttribute('style', 'position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:12px 15px;background:#FFB3C7;box-shadow:0 -4px 18px rgba(0,0,0,.25)');
-    wrap.innerHTML = '<div style="width:100%;max-width:520px;margin:0 auto;display:grid;grid-template-columns:' + (paypalAvailable ? '1fr 1fr' : '1fr') + ';gap:10px"><button type="button" class="ac-klarna-btn" aria-label="Payer avec Klarna en 3 fois" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#0A0B09;color:#fff;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px">Klarna 3x</button>' + (paypalAvailable ? '<button type="button" class="ac-paypal-btn" aria-label="Payer avec PayPal en 4 fois si éligible" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#fff;color:#003087;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" style="height:20px">PayPal 4x</button>' : '') + '</div><div role="alert" aria-live="polite" style="display:none;max-width:520px;margin:8px auto 0;color:#0A0B09;font-size:13px;font-weight:700;text-align:center"></div>';
+    wrap.innerHTML = '<div class="ac-payment-grid" style="width:100%;max-width:520px;margin:0 auto;display:grid;grid-template-columns:' + (paypalAvailable ? '1fr 1fr' : '1fr') + ';gap:10px"><button type="button" class="ac-klarna-btn" aria-label="Payer avec Klarna en 3 fois sous réserve d’éligibilité" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#0A0B09;color:#fff;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://x.klarnacdn.net/payment-method/assets/badges/generic/klarna.svg" alt="Klarna" style="height:22px">Klarna 3x*</button>' + (paypalAvailable ? '<button type="button" class="ac-paypal-btn" aria-label="Payer avec PayPal en 4 fois sous réserve d’éligibilité" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 14px;background:#fff;color:#003087;font-weight:800;font-size:15px;border:0;border-radius:10px;cursor:pointer"><img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" style="height:20px">PayPal 4x*</button>' : '') + '</div><div class="ac-payment-note" style="max-width:520px;margin:7px auto 0;color:#0A0B09;font-size:11px;line-height:1.25;text-align:center">Paiement en EUR. *3x Klarna et 4x PayPal sous réserve d’éligibilité.</div><div role="alert" aria-live="polite" style="display:none;max-width:520px;margin:8px auto 0;color:#0A0B09;font-size:13px;font-weight:700;text-align:center"></div>';
     document.body.appendChild(wrap);
-    document.body.style.paddingBottom = '90px';
+
+    function reserveCheckoutBarSpace() {
+      document.body.style.paddingBottom = Math.ceil(wrap.getBoundingClientRect().height + 12) + 'px';
+    }
+    reserveCheckoutBarSpace();
+    if (typeof window.ResizeObserver === 'function') {
+      new window.ResizeObserver(reserveCheckoutBarSpace).observe(wrap);
+    } else {
+      window.addEventListener('resize', reserveCheckoutBarSpace);
+    }
 
     var klarnaButton = wrap.querySelector('.ac-klarna-btn');
     var paypalButton = wrap.querySelector('.ac-paypal-btn');

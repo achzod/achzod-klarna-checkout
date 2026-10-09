@@ -48,8 +48,14 @@ assert.match(
 
 assert.match(
   source,
-  /aria-label="Payer avec PayPal en 4 fois si éligible"/,
+  /aria-label="Payer avec PayPal en 4 fois sous réserve d’éligibilité"/,
   'Le bouton PayPal doit expliquer clairement le 4x et son éligibilité',
+);
+
+assert.match(
+  source,
+  /Paiement en EUR\. \*3x Klarna et 4x PayPal sous réserve d’éligibilité\./,
+  'Les deux paiements fractionnés doivent annoncer la devise et leur condition d’éligibilité',
 );
 
 assert.match(
@@ -58,10 +64,29 @@ assert.match(
   'Le paiement natif Webflow doit être traduit en français',
 );
 
+assert.ok(
+  source.includes("[/\\$\\s*0[.,]00/g, '0,00 €']"),
+  'Le panier vide ne doit jamais afficher un zéro en dollars',
+);
+
+assert.ok(source.includes("[/\\b(\\d+)\\s+Reviews\\b/gi, '$1 avis']"), 'Le compteur d’avis doit être traduit');
+assert.ok(source.includes("[/\\bNewest First\\b/gi, 'Plus récents']"), 'Le tri des avis doit être traduit');
+
 assert.match(
   source,
   /new window\.Intl\.DisplayNames\(\['fr'\], \{ type: 'region' \}\)/,
   'Les pays du checkout doivent utiliser leurs noms français',
+);
+assert.match(
+  source,
+  /select\[data-node-type\*="country" i\]/,
+  'Le sélecteur pays natif Webflow doit être localisé même sans name/class explicite',
+);
+
+assert.match(
+  source,
+  /\(\?:discount\|remise\|r\[ée\]duction\)/,
+  'Un code promo appliqué doit être détecté dans les libellés français et anglais',
 );
 
 assert.match(
@@ -86,6 +111,21 @@ assert.match(
   source,
   /contentCorrectionObserver\.observe\(document\.documentElement, \{ childList: true, subtree: true \}\)/,
   'Les corrections doivent aussi couvrir le panier injecté après le chargement',
+);
+assert.match(
+  source,
+  /commerceLocalizationObserver\.observe\(document\.documentElement, \{ childList: true, subtree: true \}\)/,
+  'La localisation commerce doit rester active pour les paniers ouverts tardivement',
+);
+assert.match(
+  source,
+  /@media\(max-width:360px\).*ac-payment-grid\{grid-template-columns:1fr!important\}/,
+  'Les boutons de paiement doivent s’empiler sur les écrans mobiles très étroits',
+);
+assert.match(
+  source,
+  /new window\.ResizeObserver\(reserveCheckoutBarSpace\)/,
+  'Le contenu du checkout doit réserver la hauteur réelle de la barre mobile',
 );
 
 console.log('✅ Webflow checkout and content correction tests passed');

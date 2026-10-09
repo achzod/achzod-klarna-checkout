@@ -3,6 +3,13 @@
 const assert = require('node:assert/strict');
 const { PRODUCTS, buildLineItems, validateAndPriceCart } = require('./checkout-security');
 
+const LEGACY_EXPOSED_PROMOTIONS = {
+  BIOSCAN59: { code: 'BIOSCAN59', amountOff: 5900 },
+  ULTIMATE79: { code: 'ULTIMATE79', amountOff: 7900 },
+  BLOOD99: { code: 'BLOOD99', amountOff: 9900 },
+  DISCOVERY30: { code: 'DISCOVERY30', percentOff: 30, appliesTo: 'coaching' },
+};
+
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 function rejects(body, pattern) {
@@ -104,34 +111,20 @@ test('récupère une quantité implicite mono-produit depuis le total checkout',
   assert.equal(cart.items[0].quantity, 2);
 });
 
-test('applique les trois codes ApexLabs aux coachings', () => {
-  for (const [discountCode, discountCents] of [['BIOSCAN59', 5900], ['ULTIMATE79', 7900], ['BLOOD99', 9900]]) {
-    const cart = validateAndPriceCart({ discountCode, items: [{ name: 'Essential 12 semaines', quantity: 2 }] });
-    assert.equal(cart.subtotalCents, 109800);
-    assert.equal(cart.discountCents, discountCents);
-    assert.equal(cart.totalCents, 109800 - discountCents);
-    assert.equal(cart.promotionCode, discountCode);
+test('refuse tous les codes d’avis exposés lors de l’incident du 9 octobre', () => {
+  for (const discountCode of ['DISCOVERY30', 'BIOSCAN59', 'ULTIMATE79', 'BLOOD99', 'PEPTIDES20']) {
+    rejects(
+      { discountCode, items: [{ name: 'Essential 12 semaines', quantity: 1 }] },
+      /Code promo inconnu/,
+    );
   }
-});
-
-test('applique DISCOVERY30 au panier client Essential 12 x2 sans divergence de total', () => {
-  const cart = validateAndPriceCart({
-    discountCode: 'DISCOVERY30',
-    totalAmount: 768.60,
-    items: [{ name: 'Essential 12 semaines', quantity: 2 }],
-  });
-  assert.equal(cart.subtotalCents, 109800);
-  assert.equal(cart.discountCents, 32940);
-  assert.equal(cart.totalCents, 76860);
-  assert.equal(cart.promotionCode, 'DISCOVERY30');
-  rejects({ discountCode: 'DISCOVERY30', items: [{ name: 'Anabolic Code' }] }, /ne s’applique pas/);
 });
 
 test('récupère quantité 2 et BLOOD99 depuis l’ancien bouton Webflow', () => {
   const cart = validateAndPriceCart({
     totalAmount: 999,
     items: [{ name: 'Essential 12 semaines', quantity: 1 }],
-  });
+  }, LEGACY_EXPOSED_PROMOTIONS);
   assert.equal(cart.items[0].quantity, 2);
   assert.equal(cart.subtotalCents, 109800);
   assert.equal(cart.discountCents, 9900);
@@ -146,7 +139,7 @@ test('accepte une remise ApexLabs sur panier mixte avec quantités exactes', () 
       { name: 'Essential 12 semaines', quantity: 2 },
       { name: 'Anabolic Code', quantity: 1 },
     ],
-  });
+  }, LEGACY_EXPOSED_PROMOTIONS);
   assert.equal(cart.subtotalCents, 115700);
   assert.equal(cart.promotionCode, 'BLOOD99');
   assert.equal(cart.totalCents, 105800);
@@ -182,7 +175,7 @@ test('répare le vrai payload Webflow qui doublait toutes les quantités du pani
   assert.equal(cart.clientTotalIgnored, false);
 });
 
-test('répare plusieurs coachings, quantités et chaque remise autorisée quand la solution est unique', () => {
+test('préserve la réparation de quantités avec des promotions fournies explicitement', () => {
   for (const [discountCode, discountCents] of [['BIOSCAN59', 5900], ['ULTIMATE79', 7900], ['BLOOD99', 9900]]) {
     const cart = validateAndPriceCart({
       totalAmount: (24900 * 3 + 64900 * 2 - discountCents) / 100,
@@ -190,14 +183,14 @@ test('répare plusieurs coachings, quantités et chaque remise autorisée quand 
         { name: 'Essential 4 semaines', quantity: 1 },
         { name: 'Elite 8 semaines', quantity: 1 },
       ],
-    });
+    }, LEGACY_EXPOSED_PROMOTIONS);
     assert.deepEqual(cart.items.map((item) => item.quantity), [3, 2], discountCode);
     assert.equal(cart.promotionCode, discountCode);
     assert.equal(cart.totalCents, 24900 * 3 + 64900 * 2 - discountCents);
   }
 });
 
-test('valide toutes les paires de coachings, quantités 1 à 10 et promotions ApexLabs', () => {
+test('valide toutes les paires et quantités avec des promotions de test explicites', () => {
   const coachings = PRODUCTS.filter((product) => product.kind === 'coaching');
   const promotions = [
     { code: null, discountCents: 0 },
@@ -220,7 +213,7 @@ test('valide toutes les paires de coachings, quantités 1 à 10 et promotions Ap
                 { name: coachings[left].aliases[0], quantity: leftQuantity },
                 { name: coachings[right].aliases[0], quantity: rightQuantity },
               ],
-            });
+            }, LEGACY_EXPOSED_PROMOTIONS);
             assert.equal(cart.subtotalCents, subtotalCents);
             assert.equal(cart.totalCents, expectedTotalCents);
             assert.equal(cart.promotionCode, promotion.code);
@@ -239,7 +232,7 @@ test('ne répare jamais un faux total avec code, ebook ou quantité explicite', 
     discountCode: 'BLOOD99',
     totalAmount: 399,
     items: [{ name: 'Elite 4 semaines' }, { name: 'Essential 8 semaines' }],
-  }, /code promo/);
+  }, /code promo/i);
   rejects({
     totalAmount: 398,
     items: [{ name: 'Elite 4 semaines' }, { name: 'Anabolic Code' }],

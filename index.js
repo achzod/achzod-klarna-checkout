@@ -1590,7 +1590,7 @@ app.get('/download-links', async (req, res) => {
 });
 
 function healthCheck(req, res) {
-  const requiredPromotions = ['BIOSCAN59', 'ULTIMATE79', 'BLOOD99', 'FAQ50'];
+  const requiredPromotions = ['FAQ50'];
   const promotionConfig = Object.fromEntries(requiredPromotions.map((code) => [
     code,
     {

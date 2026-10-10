@@ -113,5 +113,15 @@ assert.match(
   /new window\.ResizeObserver\(reserveCheckoutBarSpace\)/,
   'Le contenu du checkout doit réserver la hauteur réelle de la barre mobile',
 );
+assert.match(
+  source,
+  /Une seule formule de coaching peut être achetée par commande|Quantité fixée à 1 pour les coachings/,
+  'Le parcours doit limiter les coachings à une seule unité',
+);
+assert.match(
+  source,
+  /input\.max = '1'[\s\S]*dispatchEvent\(new Event\('change'/,
+  'Le panier Webflow doit remettre à un la quantité d’un coaching et notifier son état interne',
+);
 
 console.log('✅ Webflow checkout integration tests passed');

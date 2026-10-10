@@ -196,7 +196,8 @@ function enumerateQuantitySolutions(items, clientTotalCents, promotionRules, req
       return;
     }
 
-    for (let quantity = 1; quantity <= 10; quantity += 1) {
+    const maxQuantity = working[index].kind === 'coaching' ? 1 : 10;
+    for (let quantity = 1; quantity <= maxQuantity; quantity += 1) {
       working[index].quantity = quantity;
       visit(index + 1);
       if (solutions.length > 1) return;
@@ -229,6 +230,13 @@ function validateAndPriceCart(body, promotionOverrides = {}) {
     }
     return { ...product, quantity, amount: product.amount };
   });
+
+  const coachingQuantity = pricedItems
+    .filter((item) => item.kind === 'coaching')
+    .reduce((sum, item) => sum + item.quantity, 0);
+  if (coachingQuantity > 1) {
+    throw new CheckoutValidationError('Une seule formule de coaching peut être achetée par commande');
+  }
 
   let subtotalCents = subtotalForItems(pricedItems);
   if (!Number.isSafeInteger(subtotalCents) || subtotalCents <= 0) {

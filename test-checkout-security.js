@@ -28,6 +28,12 @@ test('recalcule 216 € pour les quatre ebooks, sans croire les prix client', ()
   assert.deepEqual(cart.items.map(item => item.amount), [5900, 5900, 4900, 4900]);
 });
 
+test('construit tous les paiements Stripe en EUR', () => {
+  const cart = buildLineItems({ items: [{ name: 'Essential 8 semaines', quantity: 1 }] }, false);
+  assert.equal(cart.lineItems[0].price_data.currency, 'eur');
+  assert.equal(cart.totalCents, 39900);
+});
+
 test('bloque le total Lucas manipulé à 2 €', () => {
   rejects({
     totalAmount: 2,

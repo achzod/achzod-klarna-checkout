@@ -94,27 +94,23 @@ test('accepte les libellés Webflow pollués par prix, quantité et HTML encodé
         name: 'Coaching ESSENTIAL€ 399,00 EUR8 semaines EssentialQté: 1%3Cli%3E%3Cspan%20data-w',
         price: 399,
       },
-      {
-        name: 'Coaching ELITE€ 399,00 EUR4 semaines - ELITEQté: 1%3Cdiv%3E',
-        price: 399,
-      },
     ],
-    totalAmount: 638.40,
+    totalAmount: 319.20,
     discountCode: 'ZOD20',
   });
-  assert.deepEqual(cart.items.map((item) => item.name), ['Essential 8 semaines', 'Elite 4 semaines']);
-  assert.equal(cart.subtotalCents, 79800);
-  assert.equal(cart.totalCents, 63840);
+  assert.deepEqual(cart.items.map((item) => item.name), ['Essential 8 semaines']);
+  assert.equal(cart.subtotalCents, 39900);
+  assert.equal(cart.totalCents, 31920);
 });
 
-test('récupère une quantité implicite mono-produit depuis le total checkout', () => {
-  const cart = validateAndPriceCart({
+test('refuse une quantité de coaching supérieure à un, explicite ou implicite', () => {
+  rejects({
     totalAmount: 1298,
-    items: [{ name: 'COACHING ELITE € 649,00 EUR 8 semaines - ELITE', price: 649 }],
-  });
-  assert.equal(cart.totalCents, 129800);
-  assert.equal(cart.items[0].name, 'Elite 8 semaines');
-  assert.equal(cart.items[0].quantity, 2);
+    items: [{ name: 'COACHING ELITE € 649,00 EUR 8 semaines - ELITE', price: 649, quantity: 1 }],
+  }, /sans code promo autorisé/);
+  rejects({
+    items: [{ name: 'Elite 8 semaines', quantity: 2 }],
+  }, /Une seule formule de coaching/);
 });
 
 test('refuse tous les codes d’avis exposés lors de l’incident du 9 octobre', () => {
@@ -126,111 +122,24 @@ test('refuse tous les codes d’avis exposés lors de l’incident du 9 octobre'
   }
 });
 
-test('récupère quantité 2 et BLOOD99 depuis l’ancien bouton Webflow', () => {
+test('accepte un coaching unique accompagné d’ebooks', () => {
   const cart = validateAndPriceCart({
-    totalAmount: 999,
-    items: [{ name: 'Essential 12 semaines', quantity: 1 }],
-  }, LEGACY_EXPOSED_PROMOTIONS);
-  assert.equal(cart.items[0].quantity, 2);
-  assert.equal(cart.subtotalCents, 109800);
-  assert.equal(cart.discountCents, 9900);
-  assert.equal(cart.promotionCode, 'BLOOD99');
-  assert.equal(cart.totalCents, 99900);
-});
-
-test('accepte une remise ApexLabs sur panier mixte avec quantités exactes', () => {
-  const cart = validateAndPriceCart({
-    totalAmount: 1058,
     items: [
-      { name: 'Essential 12 semaines', quantity: 2 },
+      { name: 'Essential 12 semaines', quantity: 1 },
       { name: 'Anabolic Code', quantity: 1 },
     ],
-  }, LEGACY_EXPOSED_PROMOTIONS);
-  assert.equal(cart.subtotalCents, 115700);
-  assert.equal(cart.promotionCode, 'BLOOD99');
-  assert.equal(cart.totalCents, 105800);
+  });
+  assert.equal(cart.subtotalCents, 60800);
+  assert.equal(cart.totalCents, 60800);
 });
 
-test('répare le panier exact Elite 4 + Essential 8 malgré le mauvais total Webflow', () => {
-  const cart = validateAndPriceCart({
-    totalAmount: 399,
+test('refuse plusieurs formules de coaching dans une même commande', () => {
+  rejects({
     items: [
       { name: 'COACHING ELITE € 399,00 EUR 4 semaines - ELITE', quantity: 1 },
       { name: 'COACHING ESSENTIAL € 399,00 EUR 8 semaines Essential', quantity: 1 },
     ],
-  });
-  assert.equal(cart.subtotalCents, 79800);
-  assert.equal(cart.discountCents, 0);
-  assert.equal(cart.totalCents, 79800);
-  assert.equal(cart.promotionCode, null);
-  assert.equal(cart.clientTotalIgnored, true);
-  assert.deepEqual(cart.items.map((item) => item.name), ['Elite 4 semaines', 'Essential 8 semaines']);
-});
-
-test('répare le vrai payload Webflow qui doublait toutes les quantités du panier mixte', () => {
-  const cart = validateAndPriceCart({
-    totalAmount: 798,
-    items: [
-      { name: '4 semaines - ELITE', price: 399, quantity: 2 },
-      { name: '8 semaines Essential', price: 399, quantity: 2 },
-    ],
-  });
-  assert.equal(cart.subtotalCents, 79800);
-  assert.equal(cart.totalCents, 79800);
-  assert.deepEqual(cart.items.map((item) => item.quantity), [1, 1]);
-  assert.equal(cart.clientTotalIgnored, false);
-});
-
-test('préserve la réparation de quantités avec des promotions fournies explicitement', () => {
-  for (const [discountCode, discountCents] of [['BIOSCAN59', 5900], ['ULTIMATE79', 7900], ['BLOOD99', 9900]]) {
-    const cart = validateAndPriceCart({
-      totalAmount: (24900 * 3 + 64900 * 2 - discountCents) / 100,
-      items: [
-        { name: 'Essential 4 semaines', quantity: 1 },
-        { name: 'Elite 8 semaines', quantity: 1 },
-      ],
-    }, LEGACY_EXPOSED_PROMOTIONS);
-    assert.deepEqual(cart.items.map((item) => item.quantity), [3, 2], discountCode);
-    assert.equal(cart.promotionCode, discountCode);
-    assert.equal(cart.totalCents, 24900 * 3 + 64900 * 2 - discountCents);
-  }
-});
-
-test('valide toutes les paires et quantités avec des promotions de test explicites', () => {
-  const coachings = PRODUCTS.filter((product) => product.kind === 'coaching');
-  const promotions = [
-    { code: null, discountCents: 0 },
-    { code: 'BIOSCAN59', discountCents: 5900 },
-    { code: 'ULTIMATE79', discountCents: 7900 },
-    { code: 'BLOOD99', discountCents: 9900 },
-  ];
-  let validated = 0;
-  for (let left = 0; left < coachings.length; left += 1) {
-    for (let right = left + 1; right < coachings.length; right += 1) {
-      for (let leftQuantity = 1; leftQuantity <= 10; leftQuantity += 1) {
-        for (let rightQuantity = 1; rightQuantity <= 10; rightQuantity += 1) {
-          const subtotalCents = coachings[left].amount * leftQuantity
-            + coachings[right].amount * rightQuantity;
-          for (const promotion of promotions) {
-            const expectedTotalCents = subtotalCents - promotion.discountCents;
-            const cart = validateAndPriceCart({
-              totalAmount: expectedTotalCents / 100,
-              items: [
-                { name: coachings[left].aliases[0], quantity: leftQuantity },
-                { name: coachings[right].aliases[0], quantity: rightQuantity },
-              ],
-            }, LEGACY_EXPOSED_PROMOTIONS);
-            assert.equal(cart.subtotalCents, subtotalCents);
-            assert.equal(cart.totalCents, expectedTotalCents);
-            assert.equal(cart.promotionCode, promotion.code);
-            assert.deepEqual(cart.items.map((item) => item.quantity), [leftQuantity, rightQuantity]);
-            validated += 1;
-          }
-        }
-      }
-    }
-  }
-  assert.equal(validated, 18000);
+  }, /Une seule formule de coaching/);
 });
 
 test('ne répare jamais un faux total avec code, ebook ou quantité explicite', () => {
@@ -238,7 +147,7 @@ test('ne répare jamais un faux total avec code, ebook ou quantité explicite', 
     discountCode: 'BLOOD99',
     totalAmount: 399,
     items: [{ name: 'Elite 4 semaines' }, { name: 'Essential 8 semaines' }],
-  }, /code promo/i);
+  }, /Une seule formule de coaching/);
   rejects({
     totalAmount: 398,
     items: [{ name: 'Elite 4 semaines' }, { name: 'Anabolic Code' }],
@@ -246,7 +155,7 @@ test('ne répare jamais un faux total avec code, ebook ou quantité explicite', 
   rejects({
     totalAmount: 399,
     items: [{ name: 'Elite 4 semaines', quantity: 2 }, { name: 'Essential 8 semaines' }],
-  }, /prix catalogue/);
+  }, /Une seule formule de coaching/);
 });
 
 test('applique FAQ50 uniquement aux ebooks', () => {
@@ -260,13 +169,14 @@ test('applique FAQ50 uniquement aux ebooks', () => {
   rejects({ discountCode: 'FAQ50', items: [{ name: 'Essential 4 semaines' }] }, /ne s’applique pas/);
 });
 
-test('applique un code Stripe dynamique à tout panier et toute quantité', () => {
+test('applique un code Stripe dynamique dans les limites de quantité autorisées', () => {
   const promotions = {
     VIP17: { code: 'VIP17', percentOff: 17 },
     CLIENT123: { code: 'CLIENT123', amountOff: 12300 },
   };
   for (const product of PRODUCTS) {
-    for (let quantity = 1; quantity <= 10; quantity += 1) {
+    const maxQuantity = product.kind === 'coaching' ? 1 : 10;
+    for (let quantity = 1; quantity <= maxQuantity; quantity += 1) {
       const subtotalCents = product.amount * quantity;
       const percentDiscount = Math.round(subtotalCents * 17 / 100);
       const percentCart = validateAndPriceCart({

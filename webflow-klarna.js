@@ -626,7 +626,58 @@
     });
   }
 
+  function enforceSingleCoachingQuantity(root) {
+    nodesMatching(root || document, '.w-commerce-commercecartitem').forEach(function (row) {
+      var nameNode = row.querySelector(
+        '.w-commerce-commercecartproductname, [data-node-type="commerce-cart-product-link"], [class*="productname" i]'
+      );
+      var productName = cleanProductName(nameNode ? nameNode.textContent : row.textContent);
+      if (!/^(?:Coaching sans suivi|Essential|Elite|Private Lab)/.test(productName)) return;
+      var input = row.querySelector('input[type="number"], input[name*="quantity" i]');
+      if (!input) return;
+      input.min = '1';
+      input.max = '1';
+      input.setAttribute('aria-label', 'Quantité fixée à 1 pour les coachings');
+      if (Number(input.value) !== 1) {
+        input.value = '1';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      var wrapper = input.closest('[class*="quantity" i]');
+      if (wrapper) wrapper.style.display = 'none';
+    });
+  }
+
+  function mountCoachingQuantityGuard() {
+    function enforceSoon() {
+      [0, 150, 600, 1500].forEach(function (delay) {
+        window.setTimeout(function () { enforceSingleCoachingQuantity(document); }, delay);
+      });
+    }
+    enforceSoon();
+    document.addEventListener('click', function (event) {
+      var target = event.target && event.target.closest
+        ? event.target.closest('[data-node-type="commerce-add-to-cart-button"], .w-commerce-commerceaddtocartbutton')
+        : null;
+      if (target) enforceSoon();
+    }, true);
+    var observer = new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        Array.prototype.forEach.call(mutation.addedNodes || [], function (node) {
+          enforceSingleCoachingQuantity(node);
+        });
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
   var isCheckoutPage = /\/checkout\/?$/.test(window.location.pathname);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountCoachingQuantityGuard);
+  } else {
+    mountCoachingQuantityGuard();
+  }
 
   if (isCheckoutPage) {
     // Les widgets WhatsApp flottants passent au-dessus de la barre de paiement

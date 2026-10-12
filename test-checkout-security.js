@@ -113,8 +113,24 @@ test('refuse une quantité de coaching supérieure à un, explicite ou implicite
   }, /Une seule formule de coaching/);
 });
 
-test('refuse tous les codes d’avis exposés lors de l’incident du 9 octobre', () => {
-  for (const discountCode of ['DISCOVERY30', 'BIOSCAN59', 'ULTIMATE79', 'BLOOD99', 'PEPTIDES20']) {
+test('applique BLOOD99 comme Webflow sur un coaching', () => {
+  const cart = validateAndPriceCart({
+    discountCode: 'BLOOD99',
+    totalAmount: 300,
+    items: [{ name: 'Essential 8 semaines', quantity: 1 }],
+  });
+  assert.equal(cart.subtotalCents, 39900);
+  assert.equal(cart.discountCents, 9900);
+  assert.equal(cart.totalCents, 30000);
+  assert.equal(cart.promotionCode, 'BLOOD99');
+  rejects(
+    { discountCode: 'BLOOD99', items: [{ name: 'Anabolic Code', quantity: 1 }] },
+    /ne s’applique pas/,
+  );
+});
+
+test('refuse les autres codes d’avis exposés lors de l’incident du 9 octobre', () => {
+  for (const discountCode of ['DISCOVERY30', 'BIOSCAN59', 'ULTIMATE79', 'PEPTIDES20']) {
     rejects(
       { discountCode, items: [{ name: 'Essential 12 semaines', quantity: 1 }] },
       /Code promo inconnu/,

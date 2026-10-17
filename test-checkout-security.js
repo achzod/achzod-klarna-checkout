@@ -128,20 +128,42 @@ test('applique BLOOD99 comme Webflow sur un coaching', () => {
   );
 });
 
-test('applique DISCOVERY20 à une formule coaching uniquement', () => {
-  const cart = validateAndPriceCart({
-    discountCode: 'DISCOVERY20',
-    totalAmount: 439.2,
-    items: [{ name: 'Essential 12 semaines', quantity: 1 }],
-  });
-  assert.equal(cart.subtotalCents, 54900);
-  assert.equal(cart.discountCents, 10980);
-  assert.equal(cart.totalCents, 43920);
-  assert.equal(cart.promotionCode, 'DISCOVERY20');
-  rejects(
-    { discountCode: 'DISCOVERY20', items: [{ name: 'Anabolic Code', quantity: 1 }] },
-    /ne s’applique pas/,
-  );
+test('applique DISCOVERY20 uniquement aux six variantes coaching 8 et 12 semaines', () => {
+  const eligible = [
+    ['Essential 8 semaines', 39900],
+    ['Essential 12 semaines', 54900],
+    ['Elite 8 semaines', 64900],
+    ['Elite 12 semaines', 89900],
+    ['Private Lab 8 semaines', 79900],
+    ['Private Lab 12 semaines', 119900],
+  ];
+  for (const [name, subtotalCents] of eligible) {
+    const expectedDiscount = Math.round(subtotalCents * 0.2);
+    const cart = validateAndPriceCart({
+      discountCode: 'DISCOVERY20',
+      totalAmount: (subtotalCents - expectedDiscount) / 100,
+      items: [{ name, quantity: 1 }],
+    });
+    assert.equal(cart.subtotalCents, subtotalCents, name);
+    assert.equal(cart.discountCents, expectedDiscount, name);
+    assert.equal(cart.totalCents, subtotalCents - expectedDiscount, name);
+    assert.equal(cart.promotionCode, 'DISCOVERY20', name);
+  }
+});
+
+test('refuse explicitement DISCOVERY20 sur les 4 semaines et les produits non coaching', () => {
+  for (const name of [
+    'Essential 4 semaines',
+    'Elite 4 semaines',
+    'Private Lab 4 semaines',
+    'Coaching sans suivi',
+    'Anabolic Code',
+  ]) {
+    rejects(
+      { discountCode: 'DISCOVERY20', items: [{ name, quantity: 1 }] },
+      /ne s’applique pas/,
+    );
+  }
 });
 
 test('refuse les autres codes d’avis exposés lors de l’incident du 9 octobre', () => {

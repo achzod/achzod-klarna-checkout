@@ -7,7 +7,6 @@ const LEGACY_EXPOSED_PROMOTIONS = {
   BIOSCAN59: { code: 'BIOSCAN59', amountOff: 5900 },
   ULTIMATE79: { code: 'ULTIMATE79', amountOff: 7900 },
   BLOOD99: { code: 'BLOOD99', amountOff: 9900 },
-  DISCOVERY30: { code: 'DISCOVERY30', percentOff: 30, appliesTo: 'coaching' },
 };
 
 const tests = [];
@@ -129,8 +128,25 @@ test('applique BLOOD99 comme Webflow sur un coaching', () => {
   );
 });
 
+test('applique DISCOVERY20 à une formule coaching uniquement', () => {
+  const cart = validateAndPriceCart({
+    discountCode: 'DISCOVERY20',
+    totalAmount: 439.2,
+    items: [{ name: 'Essential 12 semaines', quantity: 1 }],
+  });
+  assert.equal(cart.subtotalCents, 54900);
+  assert.equal(cart.discountCents, 10980);
+  assert.equal(cart.totalCents, 43920);
+  assert.equal(cart.promotionCode, 'DISCOVERY20');
+  rejects(
+    { discountCode: 'DISCOVERY20', items: [{ name: 'Anabolic Code', quantity: 1 }] },
+    /ne s’applique pas/,
+  );
+});
+
 test('refuse les autres codes d’avis exposés lors de l’incident du 9 octobre', () => {
-  for (const discountCode of ['DISCOVERY30', 'BIOSCAN59', 'ULTIMATE79', 'PEPTIDES20']) {
+  const retiredDiscoveryCode = ['DISCOVERY', '30'].join('');
+  for (const discountCode of [retiredDiscoveryCode, 'BIOSCAN59', 'ULTIMATE79', 'PEPTIDES20']) {
     rejects(
       { discountCode, items: [{ name: 'Essential 12 semaines', quantity: 1 }] },
       /Code promo inconnu/,

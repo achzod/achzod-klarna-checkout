@@ -103,6 +103,7 @@ const DEFAULT_PROMOTION_RULES = Object.freeze({
   // BLOOD99 is intentionally active again because Webflow still accepts it
   // publicly; the backend must independently validate the same fixed discount.
   BLOOD99: Object.freeze({ code: 'BLOOD99', amountOff: 9900, appliesTo: 'coaching' }),
+  DISCOVERY20: Object.freeze({ code: 'DISCOVERY20', percentOff: 20, appliesTo: 'coaching' }),
   FAQ50: Object.freeze({ code: 'FAQ50', percentOff: 50, appliesTo: 'ebooks' }),
   ZOD20: Object.freeze({ code: 'ZOD20', percentOff: 20 }),
 });

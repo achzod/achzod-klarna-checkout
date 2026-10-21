@@ -18,7 +18,9 @@ const {
   fulfillCapturedPayPalOrder,
   fulfillPaidCheckout,
   fulfillPaidInvoice,
+  fulfillWebflowPaymentIntent,
   isAchzodLabInvoice,
+  webflowProductNamesFromPaymentIntent,
 } = require('./index');
 const { MemoryFulfillmentStore, RedisFulfillmentStore } = require('./fulfillment-store');
 
@@ -27,18 +29,48 @@ const OTHER_PRICE_ID = 'price_other_product';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-function createFakeStripe({ sessions = [], invoices = [], event = null } = {}) {
+function createFakeStripe({ sessions = [], invoices = [], paymentIntents = [], charges = [], event = null } = {}) {
   const sessionState = new Map(sessions.map((item) => [item.id, clone(item)]));
   const invoiceState = new Map(invoices.map((item) => [item.id, clone(item)]));
+  const paymentIntentState = new Map(paymentIntents.map((item) => [item.id, clone(item)]));
+  const chargeState = new Map(charges.map((item) => [item.id, clone(item)]));
   return {
     checkout: { sessions: {
       async retrieve(id) { return clone(sessionState.get(id)); },
       async listLineItems(id) { return { data: clone(sessionState.get(id).line_items || []) }; },
     } },
     invoices: { async retrieve(id) { return clone(invoiceState.get(id)); } },
-    paymentIntents: {},
+    paymentIntents: { async retrieve(id) { return clone(paymentIntentState.get(id)); } },
+    charges: { async retrieve(id) { return clone(chargeState.get(id)); } },
     subscriptions: {},
     webhooks: { constructEvent() { return clone(event); } },
+  };
+}
+
+function webflowPaymentIntentFixture(id = 'pi_webflow') {
+  return {
+    id,
+    status: 'succeeded',
+    amount: 50000,
+    amount_received: 50000,
+    receipt_email: null,
+    description: 'coaching-elite-12 (coaching-elite-12) x 1 = € 899,00 EUR ~~ Discount: −€ 399,00 EUR ~~ TOTAL: € 500,00 EUR',
+    metadata: {
+      'Checkout Type': 'normal',
+      'WF Cart Id': 'cart_test',
+      'WF Order Id': '92b-63c',
+    },
+    latest_charge: 'ch_webflow',
+  };
+}
+
+function webflowChargeFixture(id = 'ch_webflow') {
+  return {
+    id,
+    billing_details: {
+      email: 'niangaviktor@gmail.com',
+      name: 'Dimi nianga',
+    },
   };
 }
 
@@ -94,6 +126,85 @@ async function testReplayRestartAndConcurrency() {
     fulfillPaidInvoice(stripe, 'in_once', 'Klarna abonnement', options(new MemoryFulfillmentStore(shared), send))));
   await fulfillPaidInvoice(stripe, 'in_once', 'replay', options(new MemoryFulfillmentStore(shared), send));
   assert.equal(sends, 1, 'concurrence et restart ne doivent envoyer qu’une fois');
+}
+
+async function testWebflowPaymentIntentNotificationIsAtMostOnce() {
+  const paymentIntent = webflowPaymentIntentFixture();
+  const stripe = createFakeStripe({
+    paymentIntents: [paymentIntent],
+    charges: [webflowChargeFixture()],
+  });
+  const store = new MemoryFulfillmentStore();
+  const sent = { admin: [], apex: [] };
+  const fulfillmentOptions = {
+    ...options(store, async (...args) => { sent.admin.push(args); return true; }),
+    notifyApexLabsCoachingBuyer: async (...args) => { sent.apex.push(args); return true; },
+  };
+
+  const first = await fulfillWebflowPaymentIntent(stripe, paymentIntent.id, 'Stripe', fulfillmentOptions);
+  const replay = await fulfillWebflowPaymentIntent(stripe, paymentIntent.id, 'Stripe', fulfillmentOptions);
+
+  assert.equal(first.delivered, true);
+  assert.equal(first.webflowOrderId, '92b-63c');
+  assert.equal(replay.adminNotification.skipped, true);
+  assert.equal(sent.admin.length, 1);
+  assert.equal(sent.apex.length, 1);
+  assert.equal(sent.admin[0][0], 'niangaviktor@gmail.com');
+  assert.equal(sent.admin[0][1], 'Dimi nianga');
+  assert.deepEqual(sent.admin[0][2], ['Elite 12 semaines']);
+  assert.equal(sent.admin[0][3], '500.00');
+  assert.equal(sent.admin[0][4], 'Stripe Webflow');
+}
+
+async function testNonWebflowPaymentIntentIsIgnored() {
+  const paymentIntent = { ...webflowPaymentIntentFixture('pi_checkout'), metadata: {} };
+  const stripe = createFakeStripe({ paymentIntents: [paymentIntent] });
+  const result = await fulfillWebflowPaymentIntent(
+    stripe,
+    paymentIntent.id,
+    'Stripe',
+    options(new MemoryFulfillmentStore()),
+  );
+  assert.deepEqual(result, { ignored: true, reason: 'payment_intent_not_webflow_commerce' });
+}
+
+async function testWebhookRoutesWebflowPaymentIntent() {
+  const paymentIntent = webflowPaymentIntentFixture('pi_route');
+  paymentIntent.latest_charge = 'ch_route';
+  const stripe = createFakeStripe({
+    paymentIntents: [paymentIntent],
+    charges: [webflowChargeFixture('ch_route')],
+    event: { id: 'evt_webflow', type: 'payment_intent.succeeded', data: { object: { id: paymentIntent.id } } },
+  });
+  let sends = 0;
+  const response = {
+    statusCode: 200,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+    send(body) { this.body = body; return this; },
+  };
+  const handler = createStripeWebhookHandler(stripe, 'STRIPE_WEBHOOK_SECRET', 'Stripe', {
+    fulfillment: {
+      ...options(new MemoryFulfillmentStore(), async () => { sends += 1; return true; }),
+      notifyApexLabsCoachingBuyer: async () => true,
+    },
+  });
+  await handler(
+    { body: Buffer.from('{}'), headers: { 'stripe-signature': 'test' } },
+    response,
+  );
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.delivered, true);
+  assert.equal(response.body.webflowOrderId, '92b-63c');
+  assert.equal(sends, 1);
+}
+
+function testWebflowProductParsing() {
+  assert.deepEqual(
+    webflowProductNamesFromPaymentIntent(webflowPaymentIntentFixture()),
+    ['Elite 12 semaines'],
+  );
 }
 
 async function testCrashBeforeAndAfterSmtp() {
@@ -325,6 +436,10 @@ async function testRedisStoreUsesAtomicSetNxWithTtl() {
 
 Promise.resolve()
   .then(testReplayRestartAndConcurrency)
+  .then(testWebflowPaymentIntentNotificationIsAtMostOnce)
+  .then(testNonWebflowPaymentIntentIsIgnored)
+  .then(testWebhookRoutesWebflowPaymentIntent)
+  .then(testWebflowProductParsing)
   .then(testCrashBeforeAndAfterSmtp)
   .then(testSubscriptionAndStrictFilter)
   .then(testPayPalFulfillmentUsesStoredCartWhenCaptureOmitsItems)

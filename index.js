@@ -1212,6 +1212,89 @@ async function fulfillPaidCheckout(stripe, sessionId, paymentMethod, options = {
   };
 }
 
+function webflowProductNamesFromPaymentIntent(paymentIntent) {
+  const description = String(paymentIntent?.description || '').trim();
+  if (!description) return ['Commande Webflow'];
+
+  return description
+    .split(/\s*~~\s*/)[0]
+    .split(/\s*\+\s*/)
+    .map((item) => item.replace(/\s+x\s+\d+\s*=.*$/i, '').trim())
+    .map((item) => {
+      const slug = item.match(/\b(coaching-)?(essential|elite|private-lab)-(4|8|12)\b/i);
+      if (!slug) return item.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      const range = slug[2].toLowerCase() === 'private-lab'
+        ? 'Private Lab'
+        : slug[2][0].toUpperCase() + slug[2].slice(1).toLowerCase();
+      return `${range} ${slug[3]} semaines`;
+    })
+    .filter(Boolean);
+}
+
+function isWebflowCommercePaymentIntent(paymentIntent) {
+  const metadata = paymentIntent?.metadata || {};
+  return Boolean(metadata['WF Order Id'] && metadata['WF Cart Id']);
+}
+
+async function fulfillWebflowPaymentIntent(stripe, paymentIntentId, paymentMethod, options = {}) {
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    expand: ['latest_charge'],
+  });
+  if (paymentIntent.status !== 'succeeded') return { pending: true };
+  if (!isWebflowCommercePaymentIntent(paymentIntent)) {
+    return { ignored: true, reason: 'payment_intent_not_webflow_commerce' };
+  }
+
+  let charge = asExpandedStripeObject(paymentIntent.latest_charge);
+  if (!charge && typeof paymentIntent.latest_charge === 'string') {
+    charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+  }
+  const customerEmail = charge?.billing_details?.email || paymentIntent.receipt_email;
+  const customerName = charge?.billing_details?.name || '';
+  if (!customerEmail) throw new Error('Email client absent sur une commande Webflow payée');
+
+  const productNames = webflowProductNamesFromPaymentIntent(paymentIntent);
+  const totalAmount = ((paymentIntent.amount_received || paymentIntent.amount || 0) / 100).toFixed(2);
+  const identity = `payment_intent:${paymentIntent.id}`;
+  const store = options.store || getDefaultFulfillmentStore();
+  const sendAdmin = options.sendOrderNotification || sendOrderNotification;
+  const notifyApex = options.notifyApexLabsCoachingBuyer || notifyApexLabsCoachingBuyer;
+  const now = options.now || (() => new Date());
+
+  const adminResult = await deliverClaimedSideEffect({
+    store,
+    identity,
+    effect: 'admin_notification',
+    send: () => sendAdmin(
+      customerEmail,
+      customerName,
+      productNames,
+      totalAmount,
+      `${paymentMethod} Webflow`,
+      identity,
+    ),
+    failureMessage: 'Notification vendeur Webflow non envoyée',
+    now,
+  });
+  const apexLabsCoachingSync = await deliverClaimedSideEffect({
+    store,
+    identity,
+    effect: 'apexlabs_coaching_exclusion',
+    send: () => notifyApex(customerEmail, productNames, {
+      source: 'achzodcoaching_webflow_stripe_uae',
+    }),
+    failureMessage: 'Sync exclusion coaching APEXLABS non effectuee',
+    now,
+  });
+
+  return {
+    delivered: Boolean(adminResult.delivered),
+    webflowOrderId: paymentIntent.metadata['WF Order Id'],
+    adminNotification: adminResult,
+    apexLabsCoachingSync,
+  };
+}
+
 async function fulfillPaidInvoice(stripe, invoiceId, paymentMethod, options = {}) {
   const invoice = await stripe.invoices.retrieve(invoiceId, {
     expand: ['lines.data.price.product'],
@@ -1367,6 +1450,13 @@ function createStripeWebhookHandler(stripe, secretName, paymentMethod, options =
       let result;
       if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) {
         result = await fulfillPaidCheckout(stripe, event.data.object.id, paymentMethod, options.fulfillment);
+      } else if (event.type === 'payment_intent.succeeded') {
+        result = await fulfillWebflowPaymentIntent(
+          stripe,
+          event.data.object.id,
+          paymentMethod,
+          options.fulfillment,
+        );
       } else if (event.type === 'invoice.paid') {
         result = await fulfillPaidInvoice(
           stripe,
@@ -1865,6 +1955,7 @@ module.exports = {
   fulfillCapturedPayPalOrder,
   fulfillPaidCheckout,
   fulfillPaidInvoice,
+  fulfillWebflowPaymentIntent,
   getFulfillmentIdentity,
   getFulfillmentMetadata,
   invoiceSubscriptionId,
@@ -1872,4 +1963,5 @@ module.exports = {
   isCoachingProduct,
   notifyApexLabsCoachingBuyer,
   normalizeProductLabel,
+  webflowProductNamesFromPaymentIntent,
 };
